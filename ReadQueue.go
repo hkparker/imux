@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 	"io"
-	"fmt"
+	"time"
 	)
 
 type ReadQueue struct {
@@ -15,7 +15,7 @@ type ReadQueue struct {
 }
 
 func (queue *ReadQueue) Process(file *os.File) {
-	queue.Chunks = make(chan Chunk, 6)
+	queue.Chunks = make(chan Chunk)
 	queue.StaleChunks = make(chan Chunk, 10)
 	queue.ChunkID = 1
 	file.Seek(queue.FileHead,0)
@@ -40,15 +40,19 @@ func (queue *ReadQueue) Process(file *os.File) {
 	close(queue.Chunks)
 }
 
+
 func main() {
 	queue := ReadQueue{}
-	queue.ChunkSize = 1
-	f, _ := os.Open("./testfile")
-	queue.Process(f)
-	fmt.Println(<-queue.Chunks)
-	fmt.Println(<-queue.Chunks)
-	fmt.Println(<-queue.Chunks)
-	fmt.Println(<-queue.Chunks)
-	fmt.Println(<-queue.Chunks)
-	fmt.Println(<-queue.Chunks)
+	queue.ChunkSize = 1024
+	buffer := Buffer{}
+	file, _ := os.Open("/hayden/Pictures/render.png")
+	defer file.Close()
+	dst_file, _ := os.Create("/hayden/Pictures/render2.png")
+	defer dst_file.Close()
+	go queue.Process(file)
+	go buffer.Process(dst_file)
+	time.Sleep(time.Second)
+	for chunk := range queue.Chunks {
+		buffer.Chunks <- chunk
+	}
 }

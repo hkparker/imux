@@ -28,7 +28,7 @@ func (buffer *Buffer) Dump(file *os.File) {
 		chunk := buffer.Queue[0]
 		if chunk.ID == buffer.LastDump+1 {
 			buffer.Queue = buffer.Queue[1:]
-			file.WriteString(chunk.Data)
+			file.Write(chunk.Data)
 			buffer.LastDump = buffer.LastDump+1
 		} else {
 			break
@@ -37,6 +37,7 @@ func (buffer *Buffer) Dump(file *os.File) {
 }
 
 func (buffer *Buffer) Process(file *os.File) {
+	buffer.Chunks = make(chan Chunk, 10)
 	for chunk := range buffer.Chunks {
 		buffer.Insert(chunk)
 		buffer.Dump(file)

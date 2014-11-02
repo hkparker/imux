@@ -11,30 +11,50 @@ type IMUXSocket struct {
 }
 
 
-func (imuxsocket IMUXSocket) Open() int {
+func (imuxsocket *IMUXSocket) Open() int {
 	return 0
 }
 
-func (imuxsocket IMUXSocket) Recieve() int {	// server is provided by manager  imuxsocket.Manager.IMUXServer?
+func (imuxsocket *IMUXSocket) Recieve() int {	// server is provided by manager  imuxsocket.Manager.IMUXServer?
 	return 0
 }
 
-func (imuxsocket IMUXSocket) Download(buffer Buffer) int {
-	// download chunks from imuxsocket.Socket to buffer (a buffer is created by the manager and passed in)
-	// using channels in the buffer?
-	// buffer.RecieveChannel <- new_chunk
-	// buffer has a for loop reading from channel, insertion sorting, and dumping to disk
-	// yeah, manager creates buffer, which contains chan.  Buffer reads from chan until it is closed.  manager closes chan after download.
-	
-	
+func (imuxsocket *IMUXSocket) Download(buffer Buffer) int {
+	// defer a send to a complete channel?
+	for {
+		cmd_slice = make([]byte, 32)
+		imuxsocket.Socket.Read(cmd_slice)	// break if err
+		total := 0
+		for _, data := range cmd_slice {	// iter?
+			total += data
+		}
+		done := false
+		if data == 0 {
+			break
+		} else {
+			colon := 0
+			for iter, data := range cmd_slice {
+				if data == 58 {
+					colon = iter
+					break
+				}
+			}
+			id_bytes = cmd_slice[:colon]
+			size_bytes = cmd_slice[colon:]
+			// assign id as first int, size as second int
+			// recieve size as data
+			// create chunk, send it to the buffer
+		}
+	}
 	return 0
 }
 
-func (imuxsocket IMUXSocket) Upload(queue ChunkQueue) int {
+func (imuxsocket *IMUXSocket) Upload(queue ReadQueue) int {
 	// serve chunks from queue to imuxsocket.Socket (a read queue is created by the manager and passed in)
+	// "<32-len(id:size) zeros>id:size"
 	return 0
 }
 
-func (imuxsocket IMUXSocket) Close() int {
+func (imuxsocket *IMUXSocket) Close() int {
 	return 0
 }
