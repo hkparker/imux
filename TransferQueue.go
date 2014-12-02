@@ -25,51 +25,42 @@ type TransferQueue struct {
 
 
 
-func (queue TransferQueue) Open() int {
+func (queue *TransferQueue) Open(state IMUXState) int {
+	queue.Messages = make(chan string, 50)
+	queue.Pending = make([]Transfer, 0)
+	queue.SessionKey = uuid.NewV4().String()
 	queue.Messages <- fmt.Sprintf("Opening transfer queue between %s and %s (%d sockets)",
 								  queue.Client.Hostname,
 								  queue.Server.Hostname,
 								  queue.Server.Port)
-	// here we tell the hosts to recieve or send the sockets
+	err = queue.Server.RecieveIMUXSession(state.ServerConfig())
+	if err != nil {
+		// handle the error
+	}
+	err = queue.Client.CreateIMUXSession(state.ClientConfig())
+	if err != nil {
+		// handle the error
+	}
 	return 0
 }
 
-func (queue TransferQueue) Status() int {
+func (queue *TransferQueue) Status() int {
 	return 0
 }
 
-func (queue TransferQueue) AddTransfer() int {
+func (queue *TransferQueue) UpdateChunkSize() int {
+	// tell both the client and server to use the new chunk size
 	return 0
 }
 
-func (queue TransferQueue) ListTransfers() int {
-	return 0
-}
-
-func (queue TransferQueue) RemoveTransfer() int {
-	return 0
-}
-
-// functions to reorder transfers?
-// functions to edit transfer details (like destination name / location )?
-// Transfer struct?
-// Expose as slice?
-
-//TransferQueue.UpdateChunkSize()
 //TransferQueue.UpdateRecycling()
-//TransferQueue.Pause()
-//TransferQueue.Resume()
-//TransferQueue.Clear()
+//TransferQueue.AddTransfer()
+// increase/decrease worker size
 
 func main(){
 	queue := TransferQueue{}
 	queue.Client = Host{}					// defined previously
 	queue.Server = Host{}					// defined previously
-	queue.State = IMUXState{}				// defined here, saved (or tmp)
-	queue.Messages = make(chan string, 50)
-	queue.Pending = make([]Transfer, 100)	// defined here, may need to increase size
-	queue.SessionKey = uuid.NewV4().String()
-	
 	queue.Open()
 	fmt.Println(<- queue.Messages)
 }

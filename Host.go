@@ -1,12 +1,15 @@
 //package multiplexity
 package main
 
+import "crypto/tls"
+
 type Host struct {
 	IP string
 	Port int
 	Hostname string
 	// socket to session object Peer socket
 	Messages chan string
+	Session tls.Conn
 }
 
 func (host Host) Open() int {

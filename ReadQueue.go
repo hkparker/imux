@@ -41,18 +41,18 @@ func (queue *ReadQueue) Process(file *os.File) {
 }
 
 
-func main() {
-	queue := ReadQueue{}
-	queue.ChunkSize = 1024
-	buffer := Buffer{}
-	file, _ := os.Open("/hayden/Pictures/render.png")
-	defer file.Close()
-	dst_file, _ := os.Create("/hayden/Pictures/render2.png")
-	defer dst_file.Close()
-	go queue.Process(file)
-	go buffer.Process(dst_file)
-	time.Sleep(time.Second)
-	for chunk := range queue.Chunks {
-		buffer.Chunks <- chunk
-	}
-}
+//func main() {
+	//queue := ReadQueue{}
+	//queue.ChunkSize = 1024
+	//buffer := Buffer{}
+	//file, _ := os.Open("/hayden/Pictures/render.png")
+	//defer file.Close()
+	//dst_file, _ := os.Create("/hayden/Pictures/render2.png")
+	//defer dst_file.Close()
+	//go queue.Process(file)
+	//go buffer.Process(dst_file)
+	//time.Sleep(time.Second)
+	//for chunk := range queue.Chunks {
+		//buffer.Chunks <- chunk
+	//}
+//}
