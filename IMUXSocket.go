@@ -15,7 +15,7 @@ type IMUXSocket struct {
 }
 
 
-func (imuxsocket *IMUXSocket) Open() int {
+func (imuxsocket *IMUXSocket) Open(dialer net.Dialer) int {
 	return 0
 }
 
@@ -24,7 +24,8 @@ func (imuxsocket *IMUXSocket) Recieve() int {	// server is provided by manager  
 }
 
 // perhaps have an options to maintain socket count?
-func (imuxsocket *IMUXSocket) Download(buffer Buffer) int {
+func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) int {
+	defer done <- 0
 	// defer a send to a complete channel?
 	for {
 		// re open socket if needed
