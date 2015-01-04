@@ -25,75 +25,81 @@ func (imuxsocket *IMUXSocket) Recieve() int {	// server is provided by manager  
 }
 
 // perhaps have an options to maintain socket count?
-func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) int {
+func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) {
 	defer done <- 0
-	// defer a send to a complete channel?
 	for {
-		// re open socket if needed
-		// channel that sockets can be grabbed from?
+		// re open socket if needed, channel that sockets can be grabbed from?
+		
+		// Get the chunk header from the server
 		header_slice = make([]byte, 32)
 		_, err := imuxsocket.Socket.Read(header_slice)
 		if err != nil {
+			// socket broken while trying to read chunk header
 			break
-			// Signal the worker was killed by socket error?
 		}
 		
-		
+		// Check if the header was all 0s
 		total := 0
 		for _, data := range header_slice {
 			total += data
 		}
-
-		
 		if total == 0 {
 			break
-			// signal that there was no more data to download
-		} else {
-			header := strings.Fields(string(header_slice))
-			id := header[0]
-			size := header[1]
-			chunk_data := make([]byte, size)
-			_, err := imuxsocket.Socket.Read(chunk_data)
-			if err != nil {
-				break
-				// signal there was an error transferring data
-			}
-			chunk := Chunk{}
-			chunk.ID = id
-			chunk.Data = chunk_data
-			buffer.Chunks <- chunk
 		}
+		
+		// Parse chunk information and read data
+		header := strings.Fields(string(header_slice))
+		id := header[0]
+		size := header[1]
+		chunk_data := make([]byte, size)
+		_, err := imuxsocket.Socket.Read(chunk_data)
+		if err != nil {
+			// socket broken while trying to read chunk data
+			break
+		}
+		
+		// Create chunk and send to buffer
+		chunk := Chunk{}
+		chunk.ID = id
+		chunk.Data = chunk_data
+		buffer.Chunks <- chunk
+		
+		// Recycle socket if needed
+		
 	}
-	return 0
 }
 
-func (imuxsocket *IMUXSocket) Upload(queue ReadQueue) int {
+func (imuxsocket *IMUXSocket) Upload(queue ReadQueue) {
 	for chunk := range queue.Chunks {
-		// re open socket if needed
-		var header bytes.Buffer
+		// Get a new socket if recycling is on
 		
-		chunk_id := strconv.Itoa(chunk.ID)
-		chunk_size := strconv.Itoa(len(chunk.Data))
+		// Create the chunk header containing ID and size
+		header, err := chunk.GenerateHeader()
+		if err != nil {
+			// log.Write(err)
+			break
+		}
 		
-		header.WriteString(chunk_id)
-		header.WriteString(" ")
-		header.WriteString(chunk_size)
-		space := 32-len(header)
+		// Send the chunk header
+		_ , err := imuxsocket.Socket.Write(header)
+		if err != nil {
+			// socket error when sending chunk header
+			// this is a stale chunk, this worker is dead
+		}
 		
-		// merge chunk size onto the back of the slize
-		//chunk_header[32-len_chunk_size:] = chunk_size_bytes
-		fmt.Println(string(chunk_header))
+		// Send the chunk data
+		_, err := imuxsocket.Socket.Write(chunk.Data)
+		if err != nil {
+			// socket error when sending chunk data
+			// this is a stale chunk, this worker is dead
+		}
 		
+		// Recycle the socket if needed
 		
-		
-		
-		header.String()
-		
-		
-		// "id size<32-len(id:size) spaces>"
 	}
-	// send a done command (all zeros)
-	return 0
+	
+	// Write 32 bytes of 0s to indicate there are no more chunks
+	imuxsocket.Socket.Write(make([]byte, 32))
 }
 
 func (imuxsocket *IMUXSocket) Close() int {

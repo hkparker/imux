@@ -12,67 +12,67 @@ type Host struct {
 	Session tls.Conn
 }
 
-func (host Host) Open() int {
+func (host *Host) Open() int {
 	return 0
 }
 
-func (host Host) Close() int {
+func (host *Host) Close() int {
 	return 0
 }
 
-func (host Host) GetWorkingDirectory() int {
+func (host *Host) GetWorkingDirectory() int {
 	return 0
 }
 
-func (host Host) ChangeDirectory() int {
+func (host *Host) ChangeDirectory() int {
 	return 0
 }
 
-func (host Host) List() int {
+func (host *Host) List() int {
 	return 0
 }
 
-func (host Host) MakeDirectory() int {
+func (host *Host) MakeDirectory() int {
 	return 0
 }
 
-func (host Host) Remove() int {
+func (host *Host) Remove() int {
 	return 0
 }
 
-func (host Host) SetChunkSize() int {
+func (host *Host) SetChunkSize() int {
 	return 0
 }
 
-func (host Host) SetRecycling() int {
+func (host *Host) SetRecycling() int {
 	return 0
 }
 
-func (host Host) SendFile() int {
+func (host *Host) SendFile() int {
 	return 0
 }
 
-func (host Host) RecieveFile() int {
+func (host *Host) RecieveFile() int {
 	return 0
 }
 
-func (host Host) InitiateIMUXSession() int {
+func (host *Host) InitiateIMUXSession() int {
 	return 0
 }
 
-func (host Host) RecieveIMUXSession() int {
+func (host *Host) RecieveIMUXSession() int {
 	return 0
 }
 
-func (host Host) IncreaseIMUXSockets() int {
+func (host *Host) IncreaseIMUXSockets() int {
 	return 0
 }
 
-func (host Host) DecreaseIMUXSockets() int {
+func (host *Host) DecreaseIMUXSockets() int {
 	return 0
 }
 
-func (host Host) CloseIMUXSession() int {
+func (host *Host) CloseIMUXSession() int {
 	return 0
 }
 
