@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"strconv"
+	"bytes"
 )
 
 type IMUXSocket struct {
@@ -30,37 +31,36 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) int {
 	for {
 		// re open socket if needed
 		// channel that sockets can be grabbed from?
-		cmd_slice = make([]byte, 32)
-		_, err := imuxsocket.Socket.Read(cmd_slice)
+		header_slice = make([]byte, 32)
+		_, err := imuxsocket.Socket.Read(header_slice)
 		if err != nil {
 			break
+			// Signal the worker was killed by socket error?
 		}
+		
+		
 		total := 0
-		for _, data := range cmd_slice {
+		for _, data := range header_slice {
 			total += data
 		}
+
+		
 		if total == 0 {
 			break
+			// signal that there was no more data to download
 		} else {
-			colon := 0
-			for iter, data := range cmd_slice {
-				if data == 58 {
-					colon = iter
-					break
-				}
-			}
-			id_bytes := cmd_slice[:colon]
-			size_bytes := cmd_slice[colon:]
-			id := binary.BigEndian.Uint64(id_bytes)
-			size := binary.BigEndian.Uint64(size_bytes)
+			header := strings.Fields(string(header_slice))
+			id := header[0]
+			size := header[1]
 			chunk_data := make([]byte, size)
 			_, err := imuxsocket.Socket.Read(chunk_data)
 			if err != nil {
 				break
+				// signal there was an error transferring data
 			}
 			chunk := Chunk{}
 			chunk.ID = id
-			chunk.Data = chunk_Data
+			chunk.Data = chunk_data
 			buffer.Chunks <- chunk
 		}
 	}
@@ -70,28 +70,27 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) int {
 func (imuxsocket *IMUXSocket) Upload(queue ReadQueue) int {
 	for chunk := range queue.Chunks {
 		// re open socket if needed
+		var header bytes.Buffer
 		
-		chunk_header := make([]byte, 32)
-		chunk_size := len(chunk.Data)
-		chunk_size_bytes := []byte(strconv.Itoa(chunk_size))
-		len_chunk_size := len(chunk_size_bytes)
-		if >= 29 {
-			// overflow!
-		} else {
-			// merge chunk size onto the back of the slize
-			chunk_header[32-len_chunk_size:] = chunk_size_bytes
-			fmt.Println(string(chunk_header))
-		}
+		chunk_id := strconv.Itoa(chunk.ID)
+		chunk_size := strconv.Itoa(len(chunk.Data))
 		
+		header.WriteString(chunk_id)
+		header.WriteString(" ")
+		header.WriteString(chunk_size)
+		space := 32-len(header)
 		
-		//chunk_id := make([]byte, 32)
-		//binary.LittleEndian.PutUint32(chunk_id, chunk.ID)
-		
-		// get a byte array for the id, merge it in
+		// merge chunk size onto the back of the slize
+		//chunk_header[32-len_chunk_size:] = chunk_size_bytes
+		fmt.Println(string(chunk_header))
 		
 		
-		// "<32-len(id:size) zeros>id:size"
-		// id and size are going to need to be in a byte array
+		
+		
+		header.String()
+		
+		
+		// "id size<32-len(id:size) spaces>"
 	}
 	// send a done command (all zeros)
 	return 0

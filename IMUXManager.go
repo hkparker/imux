@@ -13,7 +13,7 @@ type IMUXManager struct {
 
 func (manager *IMUXManager) CreateSockets(bind_ips map[string]int) int {
 	workers_created := 0
-	// Lock manager
+	// Lock manager?
 	// create a dialer object for each ip in the hashof ip:count
 	// iterate over bind_ips
 	//   create a dialer for key
@@ -42,7 +42,8 @@ func (manager *IMUXManager) ServeFile(filename string, starting_position int) in
 }
 
 func (manager *IMUXManager) DownloadFile() int {
-	
+	// goroutine for each socket
+	// if sockets report error, ?
 	return 0
 }
 
