@@ -1,12 +1,12 @@
 Multiplexity
 ============
 
-Multiplexity is an inverse multiplexer for file transfers.  Files are split into chunks that are inverse multiplexed over TCP sockets.  These sockets can exist on an arbitrary number of networks and each network and have an arbitrary number of sockets.  Using multiple sockets on a single network can improve performance and evade some implementations of traffic shaping / throttling while using multiple networks allows one to maximize bandwidth consumption on each network.  Multiplexity supports a number of other options as well, including adding more sockets mid transfer, resetting each connection after each chunk, and changing the chunk size.
+Multiplexity is an inverse multiplexer for file transfers.  Data is sent over an arbitrary number of TLS sockets routed over an arbitrary number of networks.  Using multiple sockets on a single network can improve performance and evade some implementations of traffic shaping / throttling while using multiple networks allows one to maximize bandwidth consumption on each network.  Multiplexity supports some other options as well, including adjusting the socket count mid transfer, resetting each connection after a n bytes, and directory transfers.
 
 Current status
 --------------
 
-Starting to implement in Go.
+Starting to implement in Go.  The ReadQueue (File -> Chunks) and Buffer (Chunks -> File) objects are working well, I am now writing the IMUXSocket object, which passes Chunks over TLS sockets.
 
 License
 -------
@@ -16,4 +16,4 @@ This project is licensed under the MIT license, please see LICENSE.md for more i
 Contact
 -------
 
-Please feel free to contact me at haydenkparker@gmail.com
+Please feel free to contact me at hayden@hkparker.com

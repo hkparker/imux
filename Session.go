@@ -4,7 +4,7 @@ package main
 import "crypto/tls"
 
 type Session struct {
-	Host tls.Conn
+	Socket tls.Conn
 
 	// socket to host object Peer socket
 	// array of imuxmanagers
@@ -12,8 +12,7 @@ type Session struct {
 }
 
 func (session *Session) Process(socket tls.Conn) {
-	session.Host = socket
-	// forever, read from host socket
+	session.Socket = socket
 	commands := map[string]func(string) {
 		"ls": SendFileList,
 		"pwd": SendWorkingDirectory,
@@ -33,7 +32,7 @@ func (session *Session) Process(socket tls.Conn) {
 	if _, exists := commands[command]; exists {
 		commands(command)(args)
 	} else {
-		// send back a not understood
+		session.Socket.Write() // Not understood
 	}
 }
 

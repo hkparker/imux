@@ -12,4 +12,5 @@ type Transfer struct {
 	DestinationName string
 	SizeBytes int
 	TransferredBytes int
+	Speed float64
 }

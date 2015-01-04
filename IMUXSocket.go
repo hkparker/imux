@@ -24,9 +24,9 @@ func (imuxsocket *IMUXSocket) Recieve() int {	// server is provided by manager  
 	return 0
 }
 
-// perhaps have an options to maintain socket count?
-func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) {
-	defer done <- 0
+func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
+	// still need to keep track of speed
+	// still need to add recycling
 	for {
 		// re open socket if needed, channel that sockets can be grabbed from?
 		
@@ -34,7 +34,10 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) {
 		header_slice = make([]byte, 32)
 		_, err := imuxsocket.Socket.Read(header_slice)
 		if err != nil {
-			// socket broken while trying to read chunk header
+			var err_msg bytes.Buffer
+			err_msg.WriteString("Error reading chunk header from socket: ")
+			err_msg.WriteString(err)
+			done <- err_msg.String()
 			break
 		}
 		
@@ -44,6 +47,7 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) {
 			total += data
 		}
 		if total == 0 {
+			done <- "0"
 			break
 		}
 		
@@ -51,10 +55,13 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) {
 		header := strings.Fields(string(header_slice))
 		id := header[0]
 		size := header[1]
-		chunk_data := make([]byte, size)
+		chunk_data := done <- make([]byte, size)
 		_, err := imuxsocket.Socket.Read(chunk_data)
 		if err != nil {
-			// socket broken while trying to read chunk data
+			var err_msg bytes.Buffer
+			err_msg.WriteString("Error reading chunk data from socket: ")
+			err_msg.WriteString(err)
+			done <- err_msg.String()
 			break
 		}
 		
@@ -69,29 +76,39 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan int) {
 	}
 }
 
-func (imuxsocket *IMUXSocket) Upload(queue ReadQueue) {
+func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
+	// still need to keep track of speed
+	// still need to add recycling
 	for chunk := range queue.Chunks {
 		// Get a new socket if recycling is on
 		
 		// Create the chunk header containing ID and size
 		header, err := chunk.GenerateHeader()
 		if err != nil {
-			// log.Write(err)
+			done <- err
 			break
 		}
 		
 		// Send the chunk header
 		_ , err := imuxsocket.Socket.Write(header)
 		if err != nil {
-			// socket error when sending chunk header
-			// this is a stale chunk, this worker is dead
+			queue.StaleChunks <- chunk
+			var err_msg bytes.Buffer
+			err_msg.WriteString("Error writing chunk header to socket: ")
+			err_msg.WriteString(err)
+			done <- err_msg.String()
+			break
 		}
 		
 		// Send the chunk data
 		_, err := imuxsocket.Socket.Write(chunk.Data)
 		if err != nil {
-			// socket error when sending chunk data
-			// this is a stale chunk, this worker is dead
+			queue.StaleChunks <- chunk
+			var err_msg bytes.Buffer
+			err_msg.WriteString("Error writing chunk data to socket: ")
+			err_msg.WriteString(err)
+			done <- err_msg.String()
+			break
 		}
 		
 		// Recycle the socket if needed
@@ -102,6 +119,6 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue) {
 	imuxsocket.Socket.Write(make([]byte, 32))
 }
 
-func (imuxsocket *IMUXSocket) Close() int {
-	return 0
+func (imuxsocket *IMUXSocket) Close() error {
+	return imuxsocket.Socket.Close()
 }
