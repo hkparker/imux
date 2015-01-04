@@ -1,4 +1,3 @@
-//package multiplexity
 package main
 
 import (
@@ -122,3 +121,5 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 func (imuxsocket *IMUXSocket) Close() error {
 	return imuxsocket.Socket.Close()
 }
+
+//https://github.com/go-av/tls-example

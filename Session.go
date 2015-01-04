@@ -36,6 +36,10 @@ func (session *Session) Process(socket tls.Conn) {
 	}
 }
 
+func (session *Session) NextCommand() string {
+	session.Socket.Read()
+}
+
 func (session *Session) SendFileList() {
 	
 }
@@ -84,18 +88,6 @@ func (session *Session) RecieveFile() {
 	
 }
 
-//func (session *Session) SendDirectory() {
-	
-//}
-
-//func (session *Session) RecieveDirectory() {
-	
-//}
-
 func (session *Session) Close() {
 	
 }
-
-//https://github.com/go-av/tls-example
-
-
