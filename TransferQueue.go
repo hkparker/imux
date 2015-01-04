@@ -25,7 +25,7 @@ type TransferQueue struct {
 
 
 
-func (queue *TransferQueue) Open(state IMUXState) int {
+func (queue *TransferQueue) Open(state IMUXState) (err error) {
 	queue.Messages = make(chan string, 50)
 	queue.Pending = make([]Transfer, 0)
 	queue.SessionKey = uuid.NewV4().String()
@@ -35,13 +35,19 @@ func (queue *TransferQueue) Open(state IMUXState) int {
 								  queue.Server.Port)
 	err = queue.Server.RecieveIMUXSession(state.ServerConfig())
 	if err != nil {
-		// handle the error
+		queue.Messages <- fmt.Sprintf("Failed to open transfer queue: %s could not receive session: %s",
+									  queue.Server.Hostname,
+									  err)
+		return
 	}
 	err = queue.Client.CreateIMUXSession(state.ClientConfig())
 	if err != nil {
-		// handle the error
+		queue.Messages <- fmt.Sprintf("Failed to open transfer queue: %s could not create session: %s",
+									  queue.Client.Hostname,
+									  err)
+		return
 	}
-	return 0
+	return
 }
 
 func (queue *TransferQueue) Status() int {
