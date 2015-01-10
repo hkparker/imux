@@ -52,9 +52,9 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		
 		// Parse chunk information and read data
 		header := strings.Fields(string(header_slice))
-		id := header[0]
-		size := header[1]
-		chunk_data := done <- make([]byte, size)
+		id, _ := strconv.Atoi(header[0])
+		size, _  := strconv.Atoi(header[1])
+		chunk_data := make([]byte, size)
 		_, err := imuxsocket.Socket.Read(chunk_data)
 		if err != nil {
 			var err_msg bytes.Buffer
