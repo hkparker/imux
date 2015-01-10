@@ -1,4 +1,3 @@
-//package multiplexity
 package main
 
 type IMUXManager struct {

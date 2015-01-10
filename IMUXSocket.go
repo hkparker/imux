@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"encoding/binary"
 	"strconv"
 	"bytes"
 	"time"
@@ -11,7 +10,7 @@ import (
 type IMUXSocket struct {
 	Socket tls.Conn
 	Manager IMUXManager
-	LastSpeed float64	// nanosecond Duration
+	LastSpeed float64
 	Recycle bool
 }
 
@@ -29,7 +28,10 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		// Keep track of transfer speed
 		start := time.Now()
 		
-		//// re open socket if needed, channel that sockets can be grabbed from?
+		//// if reopen is true
+		////	get new socket from manager
+		////	if theres an error, break with error
+		////	set reopen false
 		
 		// Get the chunk header from the server
 		header_slice = make([]byte, 32)
@@ -57,7 +59,7 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		id, _ := strconv.Atoi(header[0])
 		size, _  := strconv.Atoi(header[1])
 		chunk_data := make([]byte, size)
-		_, err := imuxsocket.Socket.Read(chunk_data)
+		_, err = imuxsocket.Socket.Read(chunk_data)
 		if err != nil {
 			var err_msg bytes.Buffer
 			err_msg.WriteString("Error reading chunk data from socket: ")
@@ -72,10 +74,11 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		chunk.Data = chunk_data
 		buffer.Chunks <- chunk
 		
-		//// Recycle socket if needed
+		//// if recycle
+		////	close the connection (and mark it as closed?)
 		
 		// Update transfer speed
-		imuxsocket.LastSpeed := time.Since(start)
+		imuxsocket.LastSpeed = time.Since(start)
 	}
 }
 
@@ -94,7 +97,7 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		}
 		
 		// Send the chunk header
-		_ , err := imuxsocket.Socket.Write(header)
+		_ , err = imuxsocket.Socket.Write(header)
 		if err != nil {
 			queue.StaleChunks <- chunk
 			var err_msg bytes.Buffer
@@ -105,7 +108,7 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		}
 		
 		// Send the chunk data
-		_, err := imuxsocket.Socket.Write(chunk.Data)
+		_, err = imuxsocket.Socket.Write(chunk.Data)
 		if err != nil {
 			queue.StaleChunks <- chunk
 			var err_msg bytes.Buffer
@@ -115,10 +118,10 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 			break
 		}
 		
-		//// Recycle the socket if needed
+		//// if request for recycle recieved
 		
 		// Update transfer speed
-		imuxsocket.LastSpeed := time.Since(start)
+		imuxsocket.LastSpeed = time.Since(start)
 	}
 	
 	// Write 32 bytes of 0s to indicate there are no more chunks
