@@ -5,12 +5,13 @@ import (
 	"encoding/binary"
 	"strconv"
 	"bytes"
+	"time"
 )
 
 type IMUXSocket struct {
 	Socket tls.Conn
 	Manager IMUXManager
-	LastSpeed float64
+	LastSpeed float64	// nanosecond Duration
 	Recycle bool
 }
 
@@ -24,10 +25,11 @@ func (imuxsocket *IMUXSocket) Recieve() int {	// server is provided by manager  
 }
 
 func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
-	// still need to keep track of speed
-	// still need to add recycling
 	for {
-		// re open socket if needed, channel that sockets can be grabbed from?
+		// Keep track of transfer speed
+		start := time.Now()
+		
+		//// re open socket if needed, channel that sockets can be grabbed from?
 		
 		// Get the chunk header from the server
 		header_slice = make([]byte, 32)
@@ -70,16 +72,19 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		chunk.Data = chunk_data
 		buffer.Chunks <- chunk
 		
-		// Recycle socket if needed
+		//// Recycle socket if needed
 		
+		// Update transfer speed
+		imuxsocket.LastSpeed := time.Since(start)
 	}
 }
 
 func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
-	// still need to keep track of speed
-	// still need to add recycling
 	for chunk := range queue.Chunks {
-		// Get a new socket if recycling is on
+		// Keep track of transfer speed
+		start := time.Now()
+		
+		//// Get a new socket if recycling is on
 		
 		// Create the chunk header containing ID and size
 		header, err := chunk.GenerateHeader()
@@ -110,8 +115,10 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 			break
 		}
 		
-		// Recycle the socket if needed
+		//// Recycle the socket if needed
 		
+		// Update transfer speed
+		imuxsocket.LastSpeed := time.Since(start)
 	}
 	
 	// Write 32 bytes of 0s to indicate there are no more chunks
