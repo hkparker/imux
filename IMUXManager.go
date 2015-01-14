@@ -1,5 +1,7 @@
 package main
 
+import "tls"
+
 // hash table of workers?
 // could be uuid -> refernce to imuxsocket instance
 // hash table could be iterated to calculate speed
@@ -8,6 +10,7 @@ package main
 // Needs to contain .add(obj), .remove(obj), .each
 
 type IMUXManager struct {
+	Sockets chan tls.Conn
 	// server for recieving connections
 	// map of workers	// this slice gets sliced to reduce the number of workers in the next transfer (go routines are started for each fored on the slicec in eace file.)
 						// or, go routines in each chunk check a channel to see if they have been killed, and if so they stop moving chunks, allowing for a per chunk host reduction.

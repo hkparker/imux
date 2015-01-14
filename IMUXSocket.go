@@ -22,9 +22,8 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		
 		// Re-open the socket if it was closed by recycling after the last chunk
 		if re_open {
-		////	get new socket from manager
-		////	if theres an error, break with error
-			re_open = false
+			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets	// read on chan causes manager to recieve or open socket
+			// if theres an error, break with error
 		}
 		
 		// Get the chunk header from the server, 32 byte array containing id and size
@@ -69,10 +68,13 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		buffer.Chunks <- chunk
 		
 		// Recycle the socket if needed
-		if imuxmanager.Recycle {
-		////	send the recycling signal
-		////	close the socket
+		if imuxsocket.Recycle {
+			imuxsocket.Socket.Write()
+			imuxsocket.Close()
 			re_open = true
+		} else {
+			imuxsocket.Socket.Write()
+			re_open = false
 		}
 		
 		// Update the transfer speed
@@ -91,8 +93,7 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		
 		// Re-open the socket if recycling closed it
 		if re_open {
-			////	get a new socket from the manager
-			////	mark it as opened
+			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets	// read on chan causes manager to recieve or open socket
 		}
 		
 		// Create the chunk header containing ID and size
@@ -124,9 +125,15 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 			break
 		}
 		
-		//// if request for recycle recieved
-		////	close the socket
-		////	re_open = true or false
+		// Recycle the socket if the download routine requests
+		recycle_request = make([]byte, 1)
+		_, err := imuxsocket.Socket.Read(recycle_request)
+		if recycle_request[1] == "0" {
+			imuxsocket.Close()
+			re_open = true
+		} else {
+			re_open = false
+		}
 		
 		// Update transfer speed
 		imuxsocket.LastSpeed = time.Since(start)
