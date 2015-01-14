@@ -1,9 +1,15 @@
 package main
 
+// hash table of workers?
+// could be uuid -> refernce to imuxsocket instance
+// hash table could be iterated to calculate speed
+// when a worker dies, it's uuid is removed from the table
+// easier data structure that doesn't involve refernces?
+// Needs to contain .add(obj), .remove(obj), .each
+
 type IMUXManager struct {
-	State string
 	// server for recieving connections
-	// slice of workers	// this slice gets sliced to reduce the number of workers in the next transfer (go routines are started for each fored on the slicec in eace file.)
+	// map of workers	// this slice gets sliced to reduce the number of workers in the next transfer (go routines are started for each fored on the slicec in eace file.)
 						// or, go routines in each chunk check a channel to see if they have been killed, and if so they stop moving chunks, allowing for a per chunk host reduction.
 						// maybe even a chan runs and checks when a goroutine exits.  when it does it updates the worker list.  that way when they die worker list stays informed.
 						
@@ -36,7 +42,8 @@ func (manager *IMUXManager) ServeFile(filename string, starting_position int) in
 	// Create read queue
 	// for each manager.Workers
 	//   go serve the read queue
-	// wait for all the goroutines to push 
+	// wait for all the goroutines to push
+	// if sockets report error, ?
 	return 0
 }
 
@@ -52,6 +59,10 @@ func (manager *IMUXManager) UpdateRecycling() int {
 
 func (manager *IMUXManager) UpdateChunkSize() int {
 	return 0
+}
+
+func (manager *IMUXManager) CurrentSpeed() int {
+	return 0 // for each imuxsocket, sum the current speed
 }
 
 func (manager *IMUXManager) Close() int {

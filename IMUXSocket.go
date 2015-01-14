@@ -14,15 +14,6 @@ type IMUXSocket struct {
 	Recycle bool
 }
 
-
-func (imuxsocket *IMUXSocket) Open(dialer net.Dialer) int {
-	return 0
-}
-
-func (imuxsocket *IMUXSocket) Recieve() int {	// server is provided by manager  imuxsocket.Manager.IMUXServer?
-	return 0
-}
-
 func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 	for {
 		// Keep track of transfer speed
@@ -75,7 +66,9 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		buffer.Chunks <- chunk
 		
 		//// if recycle
-		////	close the connection (and mark it as closed?)
+		////	send the recycling signal
+		////	close the socket
+		////	set reopen to true
 		
 		// Update transfer speed
 		imuxsocket.LastSpeed = time.Since(start)
@@ -87,7 +80,9 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		// Keep track of transfer speed
 		start := time.Now()
 		
-		//// Get a new socket if recycling is on
+		//// if the socket if marked as closed
+		////	get a new socket from the manager
+		////	mark it as opened
 		
 		// Create the chunk header containing ID and size
 		header, err := chunk.GenerateHeader()
@@ -119,6 +114,8 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		}
 		
 		//// if request for recycle recieved
+		////	close the socket
+		////	mark the socket as closed
 		
 		// Update transfer speed
 		imuxsocket.LastSpeed = time.Since(start)
@@ -132,4 +129,22 @@ func (imuxsocket *IMUXSocket) Close() error {
 	return imuxsocket.Socket.Close()
 }
 
+
+
 //https://github.com/go-av/tls-example
+
+//func main() {
+	//queue := ReadQueue{}
+	//queue.ChunkSize = 1024
+	//buffer := Buffer{}
+	//file, _ := os.Open("/hayden/Pictures/render.png")
+	//defer file.Close()
+	//dst_file, _ := os.Create("/hayden/Pictures/render2.png")
+	//defer dst_file.Close()
+	//go queue.Process(file)
+	//go buffer.Process(dst_file)
+	//time.Sleep(time.Second)
+	//for chunk := range queue.Chunks {
+		//buffer.Chunks <- chunk
+	//}
+//}
