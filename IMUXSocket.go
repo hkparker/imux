@@ -12,6 +12,7 @@ type IMUXSocket struct {
 	Manager IMUXManager
 	LastSpeed float64
 	Recycle bool
+	UUID string
 }
 
 func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
@@ -34,6 +35,7 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 			err_msg.WriteString("Error reading chunk header from socket: ")
 			err_msg.WriteString(err)
 			done <- err_msg.String()
+			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
 			break
 		}
 		
@@ -58,6 +60,7 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 			err_msg.WriteString("Error reading chunk data from socket: ")
 			err_msg.WriteString(err)
 			done <- err_msg.String()
+			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
 			break
 		}
 		
@@ -69,11 +72,11 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		
 		// Recycle the socket if needed
 		if imuxsocket.Recycle {
-			imuxsocket.Socket.Write()
+			imuxsocket.Socket.Write([0x01])
 			imuxsocket.Close()
 			re_open = true
 		} else {
-			imuxsocket.Socket.Write()
+			imuxsocket.Socket.Write([0x00])
 			re_open = false
 		}
 		
@@ -100,6 +103,7 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		header, err := chunk.GenerateHeader()
 		if err != nil {
 			done <- err
+			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
 			break
 		}
 		
@@ -111,6 +115,7 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 			err_msg.WriteString("Error writing chunk header to socket: ")
 			err_msg.WriteString(err)
 			done <- err_msg.String()
+			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
 			break
 		}
 		
@@ -122,13 +127,14 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 			err_msg.WriteString("Error writing chunk data to socket: ")
 			err_msg.WriteString(err)
 			done <- err_msg.String()
+			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
 			break
 		}
 		
 		// Recycle the socket if the download routine requests
 		recycle_request = make([]byte, 1)
 		_, err := imuxsocket.Socket.Read(recycle_request)
-		if recycle_request[1] == "0" {
+		if recycle_request[0] == 0x01 {
 			imuxsocket.Close()
 			re_open = true
 		} else {
@@ -154,18 +160,18 @@ func (imuxsocket *IMUXSocket) Close() error {
 
 //https://github.com/go-av/tls-example
 
-//func main() {
-	//queue := ReadQueue{}
-	//queue.ChunkSize = 1024
-	//buffer := Buffer{}
-	//file, _ := os.Open("/hayden/Pictures/render.png")
-	//defer file.Close()
-	//dst_file, _ := os.Create("/hayden/Pictures/render2.png")
-	//defer dst_file.Close()
-	//go queue.Process(file)
-	//go buffer.Process(dst_file)
-	//time.Sleep(time.Second)
-	//for chunk := range queue.Chunks {
-		//buffer.Chunks <- chunk
-	//}
-//}
+func main() {
+	queue := ReadQueue{}
+	queue.ChunkSize = 1024
+	buffer := Buffer{}
+	file, _ := os.Open("/hayden/Pictures/render.png")
+	defer file.Close()
+	dst_file, _ := os.Create("/hayden/Pictures/render2.png")
+	defer dst_file.Close()
+	go queue.Process(file)
+	go buffer.Process(dst_file)
+	time.Sleep(time.Second)
+	for chunk := range queue.Chunks {
+		buffer.Chunks <- chunk
+	}
+}
