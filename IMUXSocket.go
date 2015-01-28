@@ -23,8 +23,7 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		
 		// Re-open the socket if it was closed by recycling after the last chunk
 		if re_open {
-			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets	// read on chan causes manager to recieve or open socket
-			// if theres an error, break with error
+			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets
 		}
 		
 		// Get the chunk header from the server, 32 byte array containing id and size
@@ -96,7 +95,7 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		
 		// Re-open the socket if recycling closed it
 		if re_open {
-			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets	// read on chan causes manager to recieve or open socket
+			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets
 		}
 		
 		// Create the chunk header containing ID and size

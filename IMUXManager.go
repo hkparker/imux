@@ -7,74 +7,83 @@ import (
 	"net"
 	"crypto/x509"
 	"io/ioutil"
+	"github.com/twinj/uuid"
 	)
 
 type IMUXManager struct {
 	PeerAddr string
 	Sockets chan tls.Conn
 	Workers = map[string]IMUXSocket
-	// when a new worker is created give it a uuid and assign it to the hash table
 }
 
 func (manager *IMUXManager) CreateSockets() {
 	// This function is ran in a goroutine and populates manager.Sockets by creating sockets
-
-	// Cert comes from control socket (same cert for all tls sockets) so no need to download cert here
+	
+	// perhaps a goroutine for each bind_ip (dialer struct) is created.  When more sockets are required the corresponding channel is used
+	
 	manager.Sockets = make(chan tls.Conn)
 	for {
-		// create a socket to PeerAddr
+		tls.DialWithDialer()// create a socket to PeerAddr
 			// need to know which IP to bind to
-		// put it in the channel
+		manager.Sockets <- socket
 	}
 }
 
-func (manager *IMUXManager) RecieveSockets() {
+//		RecieveSockets setup code:
+
+//	// Parse the CA and create certificate pool
+//	ca_file, err := ioutil.ReadFile("ca.pem")
+//	if err != nil {
+//	 	// report error
+//	}
+//	ca, err := x509.ParseCertificate(ca_file)
+//	if err != nil {
+//	 	// report error
+//	}
+//	pool := x509.NewCertPool()
+//	pool.AddCert(ca)
+//
+//	// Parse certificate and create structs
+//	priv_file, err := ioutil.ReadFile("ca.key")
+//	if err != nil {
+//	 	// report error
+//	}
+//	priv, err := x509.ParsePKCS1PrivateKey(priv_file)
+//	if err != nil {
+//	 	// report error
+//	}
+//	cert := tls.Certificate{
+//		Certificate: [][]byte{ ca_file },
+//		PrivateKey: priv,
+//	}
+//	config := tls.Config{
+//		ClientAuth: tls.RequireAndVerifyClientCert,
+//		Certificates: []tls.Certificate{cert},
+//		ClientCAs: pool,
+//	}
+//	config.Rand = rand.Reader
+//
+//	// Create the server and send sockets to the channel
+//	service := "0.0.0.0:443"
+//	listener, err := tls.Listen("tcp", service, &config)
+//	if err != nil {
+//		// report error
+//	}
+
+func (manager *IMUXManager) RecieveSockets(server *net.Listener, max_errors int) {
 	// This function is ran in a goroutine and populates manager.Sockets by recieving sockets
-	// error reporting?
-	// perhaps it accepts a listening server, so any errors would be caught before
-	
-	// Parse the CA and create certificate pool
-	ca_file, err := ioutil.ReadFile("ca.pem")
-	if err != nil {
-		 // report error
-	}
-	ca, err := x509.ParseCertificate(ca_file)
-	if err != nil {
-		 // report error
-	}
-	pool := x509.NewCertPool()
-	pool.AddCert(ca)
-	
-	// Parse certificate and create structs
-	priv_file, err := ioutil.ReadFile("ca.key")
-	if err != nil {
-		 // report error
-	}
-	priv, err := x509.ParsePKCS1PrivateKey(priv_file)
-	if err != nil {
-		 // report error
-	}
-	cert := tls.Certificate{
-		Certificate: [][]byte{ ca_file },
-		PrivateKey: priv,
-	}
-	config := tls.Config{
-		ClientAuth: tls.RequireAndVerifyClientCert,
-		Certificates: []tls.Certificate{cert},
-		ClientCAs: pool,
-	}
-	config.Rand = rand.Reader
-	
-	// Create the server and send sockets to the channel
-	service := "0.0.0.0:443"
-	listener, err := tls.Listen("tcp", service, &config)
-	if err != nil {
-		// report error
-	}
 	manager.Sockets = make(chan tls.Conn)
+	errors := 0
 	for {
-		// recieve a socket from that server
-		// put it in the chan
+		if errors >= max_errors {
+			break
+		}
+		socket, err := server.Accept()
+		if err == nil {
+			manager.Sockets <- socket	// any need to use uuid to check correct imux session?  Or use specific port?
+		} else {
+			errors += 1
+		}
 	}
 }
 
@@ -89,38 +98,43 @@ func (manager *IMUXManager) DecreaseSockets() {
 func (manager *IMUXManager) ServeFile(filename string, starting_position int) {
 	// Create ReadQueue from file
 	// set starting position
-	// for each manager.Workers
-	//   go serve the read queue
+	for _, imuxsocket := range manager.Workers {
+		imuxsocket.Upload(read_queue, done)
+	}
 	// wait for done from each imuxsocket
 	// report errors as they occur? (they are the done channel)
 }
 
 func (manager *IMUXManager) DownloadFile() {
 	// Create a buffer for the file
-	// for each manager.Workers
-	//   go download to the buffer
+	for _, imuxsocket := range manager.Workers {
+		imuxsocket.Download(buffer, done)
+	}
 	// wait for done from each imuxsocket
 	// report errors as they occur (they are the done channel)
 }
 
-func (manager *IMUXManager) UpdateRecycling(state bool) int {
-	// for each imux socket
+func (manager *IMUXManager) UpdateRecycling(state bool) {
+	for _, imuxsocket := range manager.Workers {
 		imuxsocket.Recycle = state
-	// end for
-}
-
-func (manager *IMUXManager) UpdateChunkSize() int {	// need to interact with ReadQueue involved with transfer
-	return 0
+	}
 }
 
 func (manager *IMUXManager) CurrentSpeed() float64 {
 	var speed float64 = 0.0
-	// for each imux socket
+	for _, imuxsocket := range manager.Workers {
 		speed += imuxsocket.LastSpeed
-	// end for
+	}
 	return speed
 }
 
 func (manager *IMUXManager) Close() int {
-	return 0
+	err_count := 0
+	for _, imuxsocket := range manager.Workers {
+		err := imuxsocket.Close()
+		if err != nil {
+			err_count += 1
+		}
+	}
+	return err_count
 }
