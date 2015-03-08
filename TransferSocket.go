@@ -7,15 +7,22 @@ import (
 	"time"
 )
 
-type IMUXSocket struct {
+type TransferSocket struct {
 	Socket tls.Conn
-	Manager IMUXManager
+	Group TransferGroup
 	LastSpeed float64
 	Recycle bool
-	UUID string
+	GenerateSocket func(transfer_socket *TransferSocket) error
 }
 
-func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
+func PrepareError(description string, message string) string {
+	var err_msg bytes.Buffer
+	err_msg.WriteString(description)
+	err_msg.WriteString(message)
+	return err_msg.String()
+}
+
+func (transfer_socket *TransferSocket) Download(buffer Buffer, done chan string) {
 	re_open := false
 	for {
 		// For keeping track of the transfer speed
@@ -23,18 +30,19 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		
 		// Re-open the socket if it was closed by recycling after the last chunk
 		if re_open {
-			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets
+			err = transfer_socket.GenerateSocket(&transfer_socket)
+			if err != nil {
+				done <- err.Error()
+				break
+			}
 		}
 		
 		// Get the chunk header from the server, 32 byte array containing id and size
 		header_slice = make([]byte, 32)
-		_, err := imuxsocket.Socket.Read(header_slice)
+		_, err := transfer_socket.Socket.Read(header_slice)
 		if err != nil {
-			var err_msg bytes.Buffer
-			err_msg.WriteString("Error reading chunk header from socket: ")
-			err_msg.WriteString(err)
-			done <- err_msg.String()
-			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
+			done <- PrepareError("Error reading chunk header from socket: ", err)
+			delete(transfer_socket.Group.Sockets, imuxsoket.UUID)
 			break
 		}
 		
@@ -53,13 +61,10 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		id, _ := strconv.Atoi(header[0])
 		size, _  := strconv.Atoi(header[1])
 		chunk_data := make([]byte, size)
-		_, err = imuxsocket.Socket.Read(chunk_data)
+		_, err = transfer_socket.Socket.Read(chunk_data)
 		if err != nil {
-			var err_msg bytes.Buffer
-			err_msg.WriteString("Error reading chunk data from socket: ")
-			err_msg.WriteString(err)
-			done <- err_msg.String()
-			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
+			done <- PrepareError("Error reading chunk data from socket: ", err)
+			delete(transfer_socket.Group.Sockets, imuxsoket.UUID)
 			break
 		}
 		
@@ -70,24 +75,24 @@ func (imuxsocket *IMUXSocket) Download(buffer Buffer, done chan string) {
 		buffer.Chunks <- chunk
 		
 		// Recycle the socket if needed
-		if imuxsocket.Recycle {
-			imuxsocket.Socket.Write([0x01])
-			imuxsocket.Close()
+		if transfer_socket.Recycle {
+			transfer_socket.Socket.Write([0x01])
+			transfer_socket.Close()
 			re_open = true
 		} else {
-			imuxsocket.Socket.Write([0x00])
+			transfer_socket.Socket.Write([0x00])
 			re_open = false
 		}
 		
 		// Update the transfer speed
-		imuxsocket.LastSpeed = time.Since(start)
+		transfer_socket.LastSpeed = size / time.Since(start)
 	}
 	
 	// Update the speed of the socket to 0 because the transfer is over
-	imuxsocket.LastSpeed = 0
+	transfer_socket.LastSpeed = 0
 }
 
-func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
+func (transfer_socket *TransferSocket) Serve(queue ReadQueue, done chan string) {
 	re_open := false
 	for chunk := range queue.Chunks {
 		// Keep track of transfer speed
@@ -95,64 +100,63 @@ func (imuxsocket *IMUXSocket) Upload(queue ReadQueue, done chan string) {
 		
 		// Re-open the socket if recycling closed it
 		if re_open {
-			imuxsocket.Socket = <- imuxsocket.IMUXManager.Sockets
+			transfer_socket.GenerateSocket(&transfer_socket)
+			if err != nil {
+				done <- err.Error()
+				break
+			}
 		}
 		
 		// Create the chunk header containing ID and size
 		header, err := chunk.GenerateHeader()
 		if err != nil {
-			done <- err
-			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
+			done <- err.Error()
+			delete(transfer_socket.Group.Sockets, imuxsoket.UUID)
 			break
 		}
 		
 		// Send the chunk header
-		_ , err = imuxsocket.Socket.Write(header)
+		_ , err = transfer_socket.Socket.Write(header)
 		if err != nil {
 			queue.StaleChunks <- chunk
-			var err_msg bytes.Buffer
-			err_msg.WriteString("Error writing chunk header to socket: ")
-			err_msg.WriteString(err)
-			done <- err_msg.String()
-			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
+			done <- PrepareError("Error writing chunk header to socket: ", err)
+			delete(transfer_socket.Group.Sockets, imuxsoket.UUID)
 			break
 		}
 		
 		// Send the chunk data
-		_, err = imuxsocket.Socket.Write(chunk.Data)
+		_, err = transfer_socket.Socket.Write(chunk.Data)
 		if err != nil {
 			queue.StaleChunks <- chunk
-			var err_msg bytes.Buffer
-			err_msg.WriteString("Error writing chunk data to socket: ")
-			err_msg.WriteString(err)
-			done <- err_msg.String()
-			delete(imuxsocket.Manager.Workers, imuxsoket.UUID)
+			done <- PrepareError("Error writing chunk data to socket: ", err)
+			delete(transfer_socket.Group.Sockets, imuxsoket.UUID)
 			break
 		}
 		
 		// Recycle the socket if the download routine requests
 		recycle_request = make([]byte, 1)
-		_, err := imuxsocket.Socket.Read(recycle_request)
+		_, err := transfer_socket.Socket.Read(recycle_request)
 		if recycle_request[0] == 0x01 {
-			imuxsocket.Close()
+			transfer_socket.Close()
 			re_open = true
 		} else {
 			re_open = false
 		}
 		
 		// Update transfer speed
-		imuxsocket.LastSpeed = time.Since(start)
+		transfer_socket.LastSpeed = queue.ChunkSize / time.Since(start)
 	}
 	
 	// Write 32 bytes of 0s to indicate there are no more chunks
-	imuxsocket.Socket.Write(make([]byte, 32))
+	transfer_socket.Socket.Write(make([]byte, 32))
 	
 	// Update the speed of the socket to 0 because the transfer is over
-	imuxsocket.LastSpeed = 0
+	transfer_socket.LastSpeed = 0
 }
 
-func (imuxsocket *IMUXSocket) Close() error {
-	return imuxsocket.Socket.Close()
+func (transfer_socket *TransferSocket) Close() error {
+	delete(transfer_socket.Group.Sockets, imuxsoket.UUID)
+	return transfer_socket.Socket.Close()
 }
 
 

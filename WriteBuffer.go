@@ -2,13 +2,13 @@ package main
 
 import "os"
 
-type Buffer struct {
+type WriteBuffer struct {
 	Chunks chan Chunk
 	Queue []Chunk
 	LastDump int
 }
 
-func (buffer *Buffer) Insert(chunk Chunk) {
+func (buffer *WriteBuffer) Insert(chunk Chunk) {
 	smaller := 0
 	for _, item := range buffer.Queue {
 		if item.ID < chunk.ID {
@@ -20,7 +20,7 @@ func (buffer *Buffer) Insert(chunk Chunk) {
 	buffer.Queue = append(smaller_chunks, append([]Chunk{chunk}, larger_chunks...)...)
 }
 
-func (buffer *Buffer) Dump(file *os.File) {
+func (buffer *WriteBuffer) Dump(file *os.File) {
 	for {
 		if len(buffer.Queue) == 0 {
 			break
@@ -36,7 +36,7 @@ func (buffer *Buffer) Dump(file *os.File) {
 	}
 }
 
-func (buffer *Buffer) Process(file *os.File) {
+func (buffer *WriteBuffer) Process(file *os.File) {
 	buffer.Chunks = make(chan Chunk, 10)
 	for chunk := range buffer.Chunks {
 		buffer.Insert(chunk)

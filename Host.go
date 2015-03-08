@@ -40,14 +40,6 @@ func (host *Host) Remove() int {
 	return 0
 }
 
-func (host *Host) SetChunkSize() int {
-	return 0
-}
-
-func (host *Host) SetRecycling() int {
-	return 0
-}
-
 func (host *Host) SendFile() int {
 	return 0
 }
@@ -56,23 +48,19 @@ func (host *Host) RecieveFile() int {
 	return 0
 }
 
-func (host *Host) InitiateIMUXSession() int {
+func (host *Host) CreateTransferGroup() int {
 	return 0
 }
 
-func (host *Host) RecieveIMUXSession() int {
+func (host *Host) RecieveTransferGroup() int {
 	return 0
 }
 
-func (host *Host) IncreaseIMUXSockets() int {
+func (host *Host) IncreaseTransferSockets() int {
 	return 0
 }
 
-func (host *Host) DecreaseIMUXSockets() int {
-	return 0
-}
-
-func (host *Host) CloseIMUXSession() int {
+func (host *Host) CloseTransferGroup() int {
 	return 0
 }
 

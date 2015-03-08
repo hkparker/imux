@@ -7,8 +7,7 @@ type Session struct {
 	Socket tls.Conn
 
 	// socket to host object Peer socket
-	// array of imuxmanagers
-	// password?
+	// array of imuxmanagers (uuid -> struct)
 }
 
 func (session *Session) Process(socket tls.Conn) {
@@ -29,8 +28,8 @@ func (session *Session) Process(socket tls.Conn) {
 		"close": Close,
 	}
 	command, args := session.NextCommand()		// "["transferfile", "sourcedir destinationdir"]"
-	if _, exists := commands[command]; exists {
-		commands(command)(args)
+	if function, exists := commands[command]; exists {
+		function(args)
 	} else {
 		session.Socket.Write() // Not understood
 	}

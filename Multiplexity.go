@@ -1,2 +1,3 @@
-//package multiplexity
 package main
+
+// GTK interface
