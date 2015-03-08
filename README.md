@@ -16,4 +16,4 @@ This project is licensed under the MIT license, please see LICENSE.md for more i
 Contact
 -------
 
-Please feel free to contact me at hayden@hkparker.com
+Feel free to contact me at hayden@hkparker.com
