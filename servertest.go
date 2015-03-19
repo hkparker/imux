@@ -24,6 +24,16 @@ func main() {
 		Certificates: []tls.Certificate{cert},
 		ClientCAs: pool,
 	}
+	config.CipherSuites = []uint16{
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+        tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+        tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+        tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+        tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+        tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+        tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256}
+    config.MinVersion = tls.VersionTLS12
 	config.Rand = rand.Reader
 
 	listener, err := tls.Listen("tcp", "0.0.0.0:8080", &config)
@@ -48,21 +58,15 @@ func handleClient(conn net.Conn) {
 	defer conn.Close()
 	buf := make([]byte, 512)
 	for {
-		log.Print("server: conn: waiting")
 		n, err := conn.Read(buf)
 		if err != nil {
-			if err != nil {
-				log.Printf("server: conn: read: %s", err)
-			}
+			log.Printf("server: conn: read: %s", err)
 			break
 		}
-
 		log.Printf("server: conn: echo %q\n", string(buf[:n]))
-		n, err = conn.Write(buf[:n])
-
+		
 		n, err = conn.Write(buf[:n])
 		log.Printf("server: conn: wrote %d bytes", n)
-
 		if err != nil {
 			log.Printf("server: write: %s", err)
 			break
