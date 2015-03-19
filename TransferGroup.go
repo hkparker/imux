@@ -163,5 +163,15 @@ func (transfer_group *TransferGroup) Close() {
 			transfer_group.Errors <- err.Error()
 		}
 	}
-	// remove from Session?
+	// remove from Session
+}
+
+
+func main() {
+	file, _ := os.Open("/hayden/Pictures/render.png")
+	defer file.Close()
+	dst_file, _ := os.Create("/hayden/Pictures/render2.png")
+	defer dst_file.Close()
+	
+	
 }
