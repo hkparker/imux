@@ -43,7 +43,8 @@ func append_host(hostname string, signature string) {
 	known_hosts.Close()
 }
 
-func sha256_sig_to_string(signature [32]byte) string {
+func SHA256Sig(conn *tls.Conn) string {
+	signature := sha256.Sum256(conn.ConnectionState().PeerCertificates[0].Signature)
 	var characters bytes.Buffer
 	for i, chr := range(signature) {
 		characters.WriteString(strconv.Itoa(int(chr)))
@@ -62,7 +63,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("client: dial: %s", err)
 	}
-	signature := sha256_sig_to_string(sha256.Sum256(conn.ConnectionState().PeerCertificates[0].Signature))
+	signature := SHA256Sig(conn)
 
 	if saved_signature, present := hosts[hostname]; present {
 		if signature == saved_signature {

@@ -14,9 +14,10 @@ type TransferGroup struct {
 	PeerAddr string
 	Server net.Listener
 	Errors chan string
-	Sockets = map[string]TransferSocket	// UUID -> socket
-	Dialers = map[string]net.Dialer
-	UUID = string
+	Sockets map[string]TransferSocket	// UUID -> socket
+	Dialers map[string]net.Dialer
+	UUID string
+	Signature string
 }
 
 // The IncreaseSockets function is used to open the TransferGroup and can be used again at any time
@@ -35,15 +36,20 @@ func (transfer_group *TransferGroup) Open(bind_ips map[string]int, uuid string) 
 	
 	for bind_ip, count := range bind_ips {
 		dialer = transfer_group.Dialers[bind_ip]
-		//cert := tls.PeerCertificates[0]
-        //signature := cert.Signature
 		connect := func(transfer_socket *TransferSocket) error {
-			// open a TLS socket with the dialer.  Verifiy TLS cert.
+			conn, err := tls.DialWithDialer(dialer, "tcp", hostname+":8080", &tls.Config{InsecureSkipVerify: true})
+			if err != nil {
+				return err
+			}
+			if transfer_socket.Signature != SHA256Sig(conn) {		// from package multiplexity?
+				return errors.New("TLS signature mismatch on TransferSocket")
+			}
 			// make sure the uuid of the group is correct
 		}
 		transfer_socket := TransferSocket {
 			Group: transfer_group,
 			GenerateSockets: connect,
+			Signature: transfer_group.Signature,
 		}
 		transfer_group.Sockets = append(transfer_group.Sockets, transfer_socket)
 	}
