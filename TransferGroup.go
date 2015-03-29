@@ -41,7 +41,7 @@ func (transfer_group *TransferGroup) Open(bind_ips map[string]int, uuid string) 
 			if err != nil {
 				return err
 			}
-			if transfer_socket.Signature != SHA256Sig(conn) {		// from package multiplexity?
+			if transfer_group.Signature != SHA256Sig(conn) {		// from package multiplexity?
 				return errors.New("TLS signature mismatch on TransferSocket")
 			}
 			// make sure the uuid of the group is correct

@@ -1,23 +1,26 @@
 //package multiplexity
 package main
 
-import "crypto/tls"
+import (
+	"crypto/tls"
+	"io"
+)
 
 type Host struct {
 	IP string
 	Port int
-	Hostname string
-	// socket to session object Peer socket
-	Messages chan string
 	Session tls.Conn
 }
 
-func (host *Host) Open() int {
-	return 0
+func CreateHost(ip string, port int, username, password string) Host {
+	host := Host{
+		IP: ip,
+		Port: port,
+	}
 }
 
 func (host *Host) Close() int {
-	return 0
+	// tell the session process to exit
 }
 
 func (host *Host) GetWorkingDirectory() int {
@@ -29,7 +32,8 @@ func (host *Host) ChangeDirectory() int {
 }
 
 func (host *Host) List() int {
-	return 0
+	io.WriteString(host.Session, "ls")
+	// read response from server, parse
 }
 
 func (host *Host) MakeDirectory() int {

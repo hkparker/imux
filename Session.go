@@ -1,92 +1,124 @@
-//package multiplexity
 package main
 
-import "crypto/tls"
+import (
+	"net"
+	"os"
+	"io"
+	"fmt"
+	"strings"
+	"log"
+)
 
 type Session struct {
-	Socket tls.Conn
-
-	// socket to host object Peer socket
-	// array of imuxmanagers (uuid -> struct)
+	ControlSocket net.Conn
+//	Groups map[string]TranferGroup
 }
 
-func (session *Session) Process(socket tls.Conn) {
-	session.Socket = socket
-	commands := map[string]func(string) {
-		"ls": SendFileList,
-		"pwd": SendWorkingDirectory,
-		"cd": ChangeWorkingDirectory,
-		"mkdir": MakeDirectory,
-		"rm": Remove,
-		"createsession": CreateSession,
-		"recievesession": RecieveSession,
-		"closesession": CloseSession,
-		"updatechunk": UpdateChunk,
-		"updaterecycle": UpdateRecyce,
-		"sendfile": SendFile,
-		"recievefile": RecieveFile,
-		"close": Close,
-	}
-	command, args := session.NextCommand()		// "["transferfile", "sourcedir destinationdir"]"
-	if function, exists := commands[command]; exists {
-		function(args)
+func (session *Session) SendFileList(args []string) {
+	
+}
+
+func (session *Session) SendWorkingDirectory(_ []string) {
+	//current_directory, _ := os.Getwd()
+	//io.WriteString(session.ControlSocket, current_directory)
+	io.WriteString(session.ControlSocket, "pwd?")
+}
+
+func (session *Session) ChangeDirectory(args []string) {
+	directory := args[0]
+	err := os.Chdir(directory)
+	if err == nil {
+		session.ControlSocket.Write([]byte(fmt.Sprintf("Changed directory to %s", directory)))
 	} else {
-		session.Socket.Write() // Not understood
+		session.ControlSocket.Write([]byte(fmt.Sprintf("Error changing directory: %s", err)))
 	}
 }
 
-func (session *Session) NextCommand() string {
-	session.Socket.Read()
-}
-
-func (session *Session) SendFileList() {
+func (session *Session) CreateDirectory(args []string) {
 	
 }
 
-func (session *Session) SendWorkingDirectory() {
+func (session *Session) Remove(args []string) {
 	
 }
 
-func (session *Session) ChangeDirectory() {
+func (session *Session) CreateIMUXSession(args []string) {
 	
 }
 
-func (session *Session) CreateDirectory() {
+func (session *Session) RecieveIMUXSession(args []string) {
 	
 }
 
-func (session *Session) Remove() {
+func (session *Session) CloseIMUXSession(args []string) {
 	
 }
 
-func (session *Session) CreateIMUXSession() {
+func (session *Session) SetChunkSize(args []string) {
 	
 }
 
-func (session *Session) RecieveIMUXSession() {
+func (session *Session) SetRecycling(args []string) {
 	
 }
 
-func (session *Session) CloseIMUXSession() {
+func (session *Session) SendFile(args []string) {
 	
 }
 
-func (session *Session) SetChunkSize() {
+func (session *Session) RecieveFile(args []string) {
 	
 }
 
-func (session *Session) SetRecycling() {
+func (session *Session) Close(args []string) {
 	
 }
 
-func (session *Session) SendFile() {
-	
-}
 
-func (session *Session) RecieveFile() {
+func main() {
+	// get the socket name from the arg
+	ipc_file := os.Args[1]
+	// parse uuid here
+	control_socket, err := net.Dial("unix", ipc_file)
+	defer control_socket.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("creating new session with %s", ipc_file)
 	
-}
-
-func (session *Session) Close() {
+	// Commands the session can run on this system
+	commands := map[string]func(*Session, []string) {
+	//	"ls": (*Session).SendFileList,
+		"pwd": (*Session).SendWorkingDirectory,
+		"cd": (*Session).ChangeDirectory,
+	//	"mkdir": (*Session).MakeDirectory,
+	//	"rm": (*Session).Remove,
+	//	"createsession": (*Session).CreateSession,
+	//	"recievesession": (*Session).RecieveSession,
+	//	"closesession": (*Session).CloseSession,
+	//	"updatechunk": (*Session).UpdateChunk,
+	//	"updaterecycle": (*Session).UpdateRecyce,
+	//	"sendfile": (*Session).SendFile,
+	//	"recievefile": (*Session).RecieveFile,
+	//	"close": (*Session).Close,
+	}
 	
+	// create a session struct
+	session := Session{}
+	//session.Groups = make(map[string]TranferGroup)
+	session.ControlSocket = control_socket
+	
+	for {
+		message := make([]byte, 1024)
+		n, _ := session.ControlSocket.Read(message)
+		command := string(message[:n])
+		command_fields := strings.Fields(command)
+		if function, exists := commands[command_fields[0]]; exists {
+			if len(command_fields) == 1 {
+				function(&session, nil)
+			} else {
+				function(&session, command_fields[1:])
+			}
+		}
+	}
 }

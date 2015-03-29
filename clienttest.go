@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -67,12 +66,11 @@ func main() {
 
 	if saved_signature, present := hosts[hostname]; present {
 		if signature == saved_signature {
-			fmt.Println("Seen it!")
-			// we've seen this host with this sign, all good (create a host object)
+			// we've seen this host with this sig, all good (create a host object)
 		} else {
-			fmt.Println("MITM!")
-			override := false
-			if override {
+			// WARNING!  We have seen this host with a different sig.  Contiue (y/y+update/no)
+			update := false
+			if update {
 				append_host(hostname, signature)
 			} else {
 				// abort connection
@@ -80,32 +78,67 @@ func main() {
 			}
 		}
 	} else {
-		//prompt the user to continue, and if so save cert?
-		fmt.Println("This ok?")
+		// we have never seen this host before.  here is the sig.  trust?  (once/forever/no)
 		connect := true
 		save_cert := true
 		if connect {
 			if save_cert {
 				append_host(hostname, signature)
 			}
-			fmt.Println("Looks like it")
 			// continue to interact with the host	(create a host object)
-		} else {
-			// abort attempt to connect to host
-			return
 		}
 	}
 	
-
-	message := "Hello\n"
-	n, err := io.WriteString(conn, message)
+	// send authentication
+	message := ""
+	_, err = io.WriteString(conn, message)
 	if err != nil {
 		log.Fatalf("client: write: %s", err)
 	}
-
-	reply := make([]byte, 256)
-	n, err = conn.Read(reply)
-	log.Printf("client: read %q (%d bytes)", string(reply[:n]), n)
+	buf := make([]byte, 512)
+	n, err := conn.Read(buf)
+	if err != nil {
+		log.Printf("server: conn: read: %s", err)
+	}
+	log.Printf(string(buf[:n]))
+	
+	n, err = conn.Read(buf)
+	if err != nil {
+		log.Printf("server: conn: read: %s", err)
+	}
+	log.Printf(string(buf[:n]))
+	
+	message = "cd ."
+	_, err = io.WriteString(conn, message)
+	if err != nil {
+		log.Fatalf("client: write: %s", err)
+	}
+	buf = make([]byte, 512)
+	n, err = conn.Read(buf)
+	if err != nil {
+		log.Printf("server: conn: read: %s", err)
+	}
+	log.Printf(string(buf[:n]))
+	
+	message = "pwd"
+	_, err = io.WriteString(conn, message)
+	if err != nil {
+		log.Fatalf("client: write: %s", err)
+	}
+	buf = make([]byte, 512)
+	n, err = conn.Read(buf)
+	if err != nil {
+		log.Printf("server: conn: read: %s", err)
+	}
+	log.Printf(string(buf[:n]))
+	
+	
+	buf = make([]byte, 512)
+	n, err = conn.Read(buf)
+	if err != nil {
+		log.Printf("server: conn: read: %s", err)
+	}
+	log.Printf(string(buf[:n]))
 	conn.Close()
 }
 

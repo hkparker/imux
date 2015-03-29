@@ -38,7 +38,7 @@ func (transfer_socket *TransferSocket) Download(buffer Buffer, done chan string)
 		}
 		
 		// Get the chunk header from the server, 32 byte array containing id and size
-		header_slice = make([]byte, 32)
+		header_slice = make([]byte, 32)	// redo without fixed size
 		_, err := transfer_socket.Socket.Read(header_slice)
 		if err != nil {
 			done <- PrepareError("Error reading chunk header from socket: ", err)
