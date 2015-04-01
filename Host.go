@@ -12,12 +12,14 @@ import (
 	"fmt"
 	"errors"
 	"encoding/json"
+	"sync"
 )
 
 type Host struct {
 	IP string
 	Port int
 	Session *tls.Conn
+	Mutex *sync.Mutex
 }
 
 func LoadKnownHosts() map[string]string {
@@ -66,6 +68,7 @@ func CreateHost(ip string, port int, username, password string, trust_dialog , m
 	host := Host{
 		IP: ip,
 		Port: port,
+		Mutex: &sync.Mutex{},
 	}
 	
 	known_hosts := LoadKnownHosts()
@@ -107,6 +110,7 @@ func CreateHost(ip string, port int, username, password string, trust_dialog , m
 }
 
 func (host *Host) QuerySession(query string) string {
+	host.Mutex.Lock()
 	_, err := host.Session.Write([]byte(query))
 	if err != nil {
 		log.Println(err)
@@ -115,6 +119,7 @@ func (host *Host) QuerySession(query string) string {
 	if err != nil {
 		log.Println(err)
 	}
+	host.Mutex.Unlock()
 	return resp
 }
 
