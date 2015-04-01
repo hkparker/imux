@@ -1,12 +1,40 @@
 Multiplexity
 ============
 
-Multiplexity is an inverse multiplexer for file transfers.  Data is sent over an arbitrary number of TLS sockets routed over an arbitrary number of networks.  Using multiple sockets on a single network can improve performance and evade some implementations of traffic shaping / throttling while using multiple networks allows one to maximize bandwidth consumption on each network.  Multiplexity supports some other options as well, including resetting each connection after every chunk of data, changing the chunk size, and increasing the socket count during a session.
+Multiplexity is an inverse multiplexer for file transfers.  Data is sent over an arbitrary number of TLS sockets routed over an arbitrary number of networks.  Using multiple sockets on a single network can improve performance and evade some implementations of traffic shaping / throttling while using multiple networks allows one to combine the bandwidth consumption of each network.  Multiplexity can also reset the transfer sockets after n bytes of data to appear as a large number of small TLS sessions.
 
-Current status
---------------
+Installation
+------------
 
-I've experiemented with several ideas and protocol features in a Ruby proof of concept implementation, and am now in the process of formalizing everything in Go.  I expect to have the basic API complete in the next few months.
+### Dependencies ###
+
+Server
+
+	* Linux (requires unix sockets and authenticates against /etc/shadow)
+	* github.com/kless/osutil/user/crypt/sha512_crypt
+	* github.com/twinj/uuid
+
+Client
+
+	* gtk
+
+### Building the server ###
+
+go build Session.go
+go build Server.go
+
+Running the server is as simple as:
+./Server
+
+### Building the client ###
+
+go build Multiplexity.go
+./Multiplexity
+
+Usage
+-----
+
+Connect to a host, create a queue
 
 License
 -------

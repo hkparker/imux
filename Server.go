@@ -5,13 +5,13 @@ import (
 	"strconv"
 	"bufio"
 	"strings"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/user"
 	"os/exec"
 	"syscall"
 	"net"
+	"fmt"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -74,19 +74,37 @@ func LookupHashAndHeader(username string) (string, string) {
 	return "", ""
 }
 
+func ReadBytes(conn net.Conn) ([]byte, error) {
+	resp := make([]byte, 0)
+	for {
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		buf = buf[:n]
+		if err != nil {
+			return resp, err
+		} else {
+			resp = append(resp, buf...)
+			if n < 1024 {
+				return resp, nil
+			}
+		}
+	}
+	return resp, nil
+}
+
 // Authenticate user and setup session process running as user
 func ProcessSessionRequest(conn net.Conn) {
-	
 	// Read username and password from socket
 	defer conn.Close()
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
+	creds, err := ReadBytes(conn)
 	if err != nil {
-		log.Printf("failed to read authentication: %s", err)
+		log.Println(err)
 		return
 	}
-	authentication := string(buf[:n])
-	credentials := strings.Fields(authentication)
+	credentials := strings.Fields(string(creds))
+	if len(credentials) != 2 {
+		return
+	}
 	username := credentials[0]
 	password := credentials[1]
 	
@@ -113,10 +131,10 @@ func ProcessSessionRequest(conn net.Conn) {
 	// Create process as user if authenticated
 	if authentication_failed {
 		log.Printf("authentication error from %s as user %s", username, context)
-		_, err = io.WriteString(conn, "Authentication failure")
+		conn.Write([]byte(fmt.Sprintf("%s", "Authentication failure")))
 	} else {
 		log.Printf("successful login as %s from %s", username, conn.RemoteAddr())
-		_, err = io.WriteString(conn, "Authentication successful")
+		conn.Write([]byte(fmt.Sprintf("%s", "Authentication successful")))
 		
 		// Create a unix socket to pass commands from client to user process
 		uuid.SwitchFormat(uuid.CleanHyphen)
@@ -134,24 +152,27 @@ func ProcessSessionRequest(conn net.Conn) {
 		cmd.Start()
 		
 		// Pass messages
-		session, err := ipc.Accept()
+		ipc_session, err := ipc.Accept()
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			return
 		}
-		session.Write([]byte("cd " + account.HomeDir))
-		buf = make([]byte, 1024)
-		session.Read(buf)
-		conn.Write(buf)
+		ipc_session.Write([]byte(fmt.Sprintf("cd %s", account.HomeDir)))
+		ReadBytes(ipc_session)
 		
 		for {
-			buf = make([]byte, 1024)
-			conn.Read(buf)
-			session.Write(buf)
-			log.Println(string(buf))
-			buf = make([]byte, 1024)
-			session.Read(buf)
-			log.Println(string(buf))
-			conn.Write(buf)
+			bytes, err := ReadBytes(conn)
+			if err != nil {
+				log.Println(err)
+				break
+			}
+			ipc_session.Write(bytes)
+			bytes, err = ReadBytes(ipc_session)
+			if err != nil {
+				log.Println(err)
+				break
+			}
+			conn.Write(bytes)
 		}
 	}
 	
