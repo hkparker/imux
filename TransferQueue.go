@@ -54,6 +54,14 @@ func (queue *TransferQueue) Status() int {
 	return 0
 }
 
+//func (host *Host) ServeFile() int {
+	//return 0
+//}
+
+//func (host *Host) RecieveFile() int {
+	//return 0
+//}
+
 func (queue *TransferQueue) UpdateChunkSize() int {
 	// tell both the client and server to use the new chunk size
 	return 0

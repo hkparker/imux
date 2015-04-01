@@ -20,13 +20,6 @@ type Host struct {
 	Session *tls.Conn
 }
 
-type Entry struct {
-	Name string
-	Size int64
-	Perms string
-	Mod string
-}
-
 func LoadKnownHosts() map[string]string {
 	sigs := make(map[string]string)
 	filename := os.Getenv("HOME")+"/.multiplexity/known_hosts"
@@ -69,28 +62,6 @@ func SHA256Sig(conn *tls.Conn) string {
 	return characters.String()
 }
 
-func (host *Host) QuerySession(query string) (string, error) {
-	_, err := host.Session.Write([]byte(query))
-	if err != nil {
-		log.Println(err)
-	}
-	resp := make([]byte, 0)
-	for {
-		buf := make([]byte, 1024)
-		n, err := host.Session.Read(buf)
-		buf = buf[:n]
-		if err != nil {
-			return string(resp), err
-		} else {
-			resp = append(resp, buf...)
-			if n < 1024 {
-				return string(resp), nil
-			}
-		}
-	}
-	return string(resp), nil
-}
-
 func CreateHost(ip string, port int, username, password string, trust_dialog , mitm_warning func()(bool, bool)) (Host, error) {
 	host := Host{
 		IP: ip,
@@ -124,7 +95,7 @@ func CreateHost(ip string, port int, username, password string, trust_dialog , m
 		}
 	}
 	
-	login, err := host.QuerySession(fmt.Sprintf("%s %s", username, password))
+	login := host.QuerySession(fmt.Sprintf("%s %s", username, password))
 	if err != nil {
 		log.Printf("error authenticating: %s", err)
 	}
@@ -135,44 +106,38 @@ func CreateHost(ip string, port int, username, password string, trust_dialog , m
 	return host, nil
 }
 
-func (host *Host) Close() {
-	_, err := host.QuerySession("close")
+func (host *Host) QuerySession(query string) string {
+	_, err := host.Session.Write([]byte(query))
 	if err != nil {
 		log.Println(err)
 	}
+	resp, err := ReadLine(host.Session)
+	if err != nil {
+		log.Println(err)
+	}
+	return resp
+}
+
+func (host *Host) Close() {
+	host.QuerySession("close")
 }
 
 func (host *Host) WorkingDirectory() string {
-	resp, err := host.QuerySession("pwd")
-	if err != nil {
-		log.Println(err)
-	}
-	return resp
+	return host.QuerySession("pwd")
 }
 
 func (host *Host) ChangeDirectory(dir string) string {
-	resp, err := host.QuerySession("cd " + dir)
-	if err != nil {
-		log.Println(err)
-	}
-	return resp
+	return host.QuerySession("cd " + dir)
 }
 
 func (host *Host) CreateDirectory(dir string) string {
-	resp, err := host.QuerySession("mkdir " + dir)
-	if err != nil {
-		log.Println(err)
-	}
-	return resp
+	return host.QuerySession("mkdir " + dir)
 }
 
 func (host *Host) List(dir string) []Entry {
-	resp, err := host.QuerySession("ls " + dir)
-	if err != nil {
-		log.Println(err)
-	}
+	resp := host.QuerySession("ls " + dir)
 	files := make([]Entry, 0)
-	err = json.Unmarshal([]byte(resp), &files)
+	err := json.Unmarshal([]byte(resp), &files)
 	if err != nil {
 		log.Println(err)
 	}
@@ -180,45 +145,5 @@ func (host *Host) List(dir string) []Entry {
 }
 
 func (host *Host) Remove(item string) string {
-	resp, err := host.QuerySession("rm " + item)
-	if err != nil {
-		log.Println(err)
-	}
-	return resp
-}
-
-//func (host *Host) ServeFile() int {
-	//return 0
-//}
-
-//func (host *Host) RecieveFile() int {
-	//return 0
-//}
-
-//func (host *Host) CreateTransferGroup() int {
-	//return 0
-//}
-
-//func (host *Host) RecieveTransferGroup() int {
-	//return 0
-//}
-
-//func (host *Host) IncreaseTransferSockets() int {
-	//return 0
-//}
-
-//func (host *Host) CloseTransferGroup() int {
-	//return 0
-//}
-
-
-
-func main() {
-	host, _ := CreateHost("127.0.0.1", 8080, "hayden", "", nil, nil)
-	fmt.Println(host.WorkingDirectory())
-	fmt.Println(host.ChangeDirectory("/hayden"))
-	fmt.Println(host.CreateDirectory("/home/hayden/testdir"))
-	fmt.Println(host.Remove("/home/hayden/testdir"))
-	fmt.Println(host.List("."))
-	host.Close()
+	return host.QuerySession("rm " + item)
 }

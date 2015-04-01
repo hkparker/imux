@@ -10,13 +10,6 @@ import (
 	"encoding/json"
 )
 
-type Entry struct {
-	Name string
-	Size int64
-	Perms string
-	Mod string
-}
-
 type Session struct {
 	ControlSocket net.Conn
 //	Groups map[string]TranferGroup
@@ -115,24 +108,6 @@ func (session *Session) Close(_ []string) {
 	os.Exit(0)
 }
 
-func ReadLine(conn net.Conn) (string, error) {
-	resp := make([]byte, 0)
-	for {
-		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
-		buf = buf[:n]
-		if err != nil {
-			return string(resp), err
-		} else {
-			resp = append(resp, buf...)
-			if n < 1024 {
-				return string(resp), nil
-			}
-		}
-	}
-	return string(resp), nil
-}
-
 func main() {
 	// get the socket name from the first arg
 	ipc_file := os.Args[1]
@@ -141,14 +116,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("creating new session with %s", ipc_file)
 	
 	// commands the session can run on this system
 	commands := map[string]func(*Session, []string) {
-		"ls": (*Session).List,
+		"close": (*Session).Close,
 		"pwd": (*Session).WorkingDirectory,
 		"cd": (*Session).ChangeDirectory,
 		"mkdir": (*Session).CreateDirectory,
+		"ls": (*Session).List,
 		"rm": (*Session).Remove,
 	//	"createsession": (*Session).CreateSession,
 	//	"recievesession": (*Session).RecieveSession,
@@ -157,7 +132,6 @@ func main() {
 	//	"updaterecycle": (*Session).UpdateRecyce,
 	//	"sendfile": (*Session).SendFile,
 	//	"recievefile": (*Session).RecieveFile,
-		"close": (*Session).Close,
 	}
 	
 	// create a session struct

@@ -8,23 +8,25 @@ Installation
 
 ### Dependencies ###
 
-Server
+**Server**
 
 	* Linux (requires unix sockets and authenticates against /etc/shadow)
 	* github.com/kless/osutil/user/crypt/sha512_crypt
 	* github.com/twinj/uuid
 
-Client
+**Client**
 
 	* gtk
 
 ### Building the server ###
 
-go build Session.go
-go build Server.go
+`go build Session.go`
+
+`go build Server.go`
 
 Running the server is as simple as:
-./Server
+
+`./Server`
 
 ### Building the client ###
 

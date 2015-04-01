@@ -74,24 +74,6 @@ func LookupHashAndHeader(username string) (string, string) {
 	return "", ""
 }
 
-func ReadBytes(conn net.Conn) ([]byte, error) {
-	resp := make([]byte, 0)
-	for {
-		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
-		buf = buf[:n]
-		if err != nil {
-			return resp, err
-		} else {
-			resp = append(resp, buf...)
-			if n < 1024 {
-				return resp, nil
-			}
-		}
-	}
-	return resp, nil
-}
-
 // Authenticate user and setup session process running as user
 func ProcessSessionRequest(conn net.Conn) {
 	// Read username and password from socket
@@ -141,6 +123,7 @@ func ProcessSessionRequest(conn net.Conn) {
 		ipc_filename := "/tmp/multiplexity_" + uuid.NewV4().String()
 		ipc, err := net.Listen("unix", ipc_filename)
 		defer ipc.Close()
+		defer os.RemoveAll(ipc_filename)
 		uid, _ := strconv.Atoi(account.Uid)
 		gid, _ := strconv.Atoi(account.Gid)
 		os.Chown(ipc_filename, uid, gid)
