@@ -14,13 +14,12 @@ type TransferGroup struct {
 	PeerAddr string
 	Server net.Listener
 	Errors chan string
-	Sockets map[string]TransferSocket	// UUID -> socket
+	//Sockets map[string]TransferSocket	// UUID -> socket
 	Dialers map[string]net.Dialer
 	UUID string
 	Signature string
 }
 
-// The IncreaseSockets function is used to open the TransferGroup and can be used again at any time
 func (transfer_group *TransferGroup) Open(bind_ips map[string]int, uuid string) {
 	// Make sure a tls.Dialer exists in Dialers for each bind ip address
 	for bind_ip, _ := range bind_ips {

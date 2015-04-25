@@ -1,4 +1,3 @@
-//package multiplexity
 package main
 
 import(
@@ -7,47 +6,39 @@ import(
 )
 
 type TransferQueue struct {
-	Client Host
-	Server Host
-	State IMUXState
+	Client *Host
+	Server *Host
 	Messages chan string
-	Pending []Transfer
+	//Pending []Transfer
 	SessionKey string
 }
 
-// IMUXState object is created and points to a TransferQueue
-// when the imux config need be adjusted, adjust the state
-// the state is pointing at a transfer queue and from there can grab hosts
-// it can then command the hosts to behave
-// OR, this is just part of the transfer queue in the first place
-// if so, I need to hold the imux state in the transfer queue
-// could make the methods on type tranfer queue, then have those refernce the queue imuxstate
-
-
-
-func (queue *TransferQueue) Open(state IMUXState) (err error) {
+func CreateTransferQueue(client, server *Host) (TransferQueue, error) {//, sockets map[string]int, recycling bool, chunk_size int) (TransferQueue, error) {
+	queue := TransferQueue{}
+	queue.Client = client
+	queue.Server = server
 	queue.Messages = make(chan string, 50)
-	queue.Pending = make([]Transfer, 0)
+	//queue.Pending = make([]Transfer, 0)
 	queue.SessionKey = uuid.NewV4().String()
-	queue.Messages <- fmt.Sprintf("Opening transfer queue between %s and %s (%d sockets)",
-								  queue.Client.Hostname,
-								  queue.Server.Hostname,
-								  queue.Server.Port)
-	err = queue.Server.RecieveIMUXSession(state.ServerConfig())
-	if err != nil {
-		queue.Messages <- fmt.Sprintf("Failed to open transfer queue: %s could not receive session: %s",
-									  queue.Server.Hostname,
-									  err)
-		return
-	}
-	err = queue.Client.CreateIMUXSession(state.ClientConfig())
-	if err != nil {
-		queue.Messages <- fmt.Sprintf("Failed to open transfer queue: %s could not create session: %s",
-									  queue.Client.Hostname,
-									  err)
-		return
-	}
-	return
+	queue.Messages <- fmt.Sprintf("Opening transfer queue between %s and %s",
+								  queue.Client.IP,
+								  queue.Server.IP)
+	//resp = queue.Server.QuerySession("createsession ")
+	//if resp == nil {
+	//	queue.Messages <- fmt.Sprintf("Failed to open transfer queue: %s could not receive session: %s",
+	//								  queue.Server.Hostname,
+	//								  err)
+	//	return queue, errors.New()
+	//}
+	// parse resp
+	//err = queue.Client.QuerySession("recievesession")
+	//if err != nil {
+	//	queue.Messages <- fmt.Sprintf("Failed to open transfer queue: %s could not create session: %s",
+	//								  queue.Client.Hostname,
+	//								  err)
+	//	return
+	//}
+	return queue, nil
 }
 
 func (queue *TransferQueue) Status() int {
@@ -69,12 +60,3 @@ func (queue *TransferQueue) UpdateChunkSize() int {
 
 //TransferQueue.UpdateRecycling()
 //TransferQueue.AddTransfer()
-// increase/decrease worker size
-
-func main(){
-	queue := TransferQueue{}
-	queue.Client = Host{}					// defined previously
-	queue.Server = Host{}					// defined previously
-	queue.Open()
-	fmt.Println(<- queue.Messages)
-}
