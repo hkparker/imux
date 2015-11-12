@@ -3,8 +3,8 @@ package main
 import "os"
 
 type WriteBuffer struct {
-	Chunks chan Chunk
-	Queue []Chunk
+	Chunks   chan Chunk
+	Queue    []Chunk
 	LastDump int
 }
 
@@ -29,7 +29,7 @@ func (buffer *WriteBuffer) Dump(file *os.File) {
 		if chunk.ID == buffer.LastDump+1 {
 			buffer.Queue = buffer.Queue[1:]
 			file.Write(chunk.Data)
-			buffer.LastDump = buffer.LastDump+1
+			buffer.LastDump = buffer.LastDump + 1
 		} else {
 			break
 		}

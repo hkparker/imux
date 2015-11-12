@@ -1,26 +1,26 @@
 package main
 
 import (
-	"os"
 	"io"
-	)
+	"os"
+)
 
 type ReadQueue struct {
-	Chunks chan Chunk
+	Chunks      chan Chunk
 	StaleChunks chan Chunk
-	FileHead int64
-	ChunkSize int
-	ChunkID int
+	FileHead    int64
+	ChunkSize   int
+	ChunkID     int
 }
 
 func (queue *ReadQueue) Process(file *os.File) {
 	queue.Chunks = make(chan Chunk)
 	queue.StaleChunks = make(chan Chunk, 10)
 	queue.ChunkID = 1
-	file.Seek(queue.FileHead,0)
+	file.Seek(queue.FileHead, 0)
 	for {
 		for len(queue.StaleChunks) > 0 {
-			queue.Chunks <- (<- queue.StaleChunks)
+			queue.Chunks <- (<-queue.StaleChunks)
 		}
 		new_chunk := Chunk{}
 		new_chunk.ID = queue.ChunkID

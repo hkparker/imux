@@ -1,18 +1,18 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"net"
 	"os"
-	"fmt"
-	"log"
 	"strings"
-	"io/ioutil"
-	"encoding/json"
 )
 
 type Session struct {
 	ControlSocket net.Conn
-//	Groups map[string]TranferGroup
+	//	Groups map[string]TranferGroup
 }
 
 func (session *Session) WorkingDirectory(_ []string) {
@@ -20,7 +20,7 @@ func (session *Session) WorkingDirectory(_ []string) {
 	if err != nil {
 		session.ControlSocket.Write([]byte(err.Error()))
 	} else {
-		session.ControlSocket.Write([]byte(fmt.Sprintf("%s",current_directory)))
+		session.ControlSocket.Write([]byte(fmt.Sprintf("%s", current_directory)))
 	}
 }
 
@@ -62,44 +62,44 @@ func (session *Session) List(args []string) {
 		return
 	}
 	items := make([]Entry, 0)
-    for _, f := range files {
+	for _, f := range files {
 		item := Entry{Name: f.Name(),
-					  Size: f.Size(),
-					  Perms: f.Mode().String(),
-					  Mod: f.ModTime().Format("01/02/2006 3:04PM"),
-					 }
+			Size:  f.Size(),
+			Perms: f.Mode().String(),
+			Mod:   f.ModTime().Format("01/02/2006 3:04PM"),
+		}
 		items = append(items, item)
-    }
+	}
 	contents, _ := json.Marshal(items)
 	session.ControlSocket.Write([]byte(contents))
 }
 
 //func (session *Session) CreateIMUXSession(args []string) {
-	
+
 //}
 
 //func (session *Session) RecieveIMUXSession(args []string) {
-	
+
 //}
 
 //func (session *Session) CloseIMUXSession(args []string) {
-	
+
 //}
 
 //func (session *Session) SetChunkSize(args []string) {
-	
+
 //}
 
 //func (session *Session) SetRecycling(args []string) {
-	
+
 //}
 
 //func (session *Session) SendFile(args []string) {
-	
+
 //}
 
 //func (session *Session) RecieveFile(args []string) {
-	
+
 //}
 
 func (session *Session) Close(_ []string) {
@@ -108,7 +108,7 @@ func (session *Session) Close(_ []string) {
 	os.Exit(0)
 }
 
-func main() {
+func main3() {
 	// get the socket name from the first arg
 	ipc_file := os.Args[1]
 	control_socket, err := net.Dial("unix", ipc_file)
@@ -116,29 +116,29 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	
+
 	// commands the session can run on this system
-	commands := map[string]func(*Session, []string) {
+	commands := map[string]func(*Session, []string){
 		"close": (*Session).Close,
-		"pwd": (*Session).WorkingDirectory,
-		"cd": (*Session).ChangeDirectory,
+		"pwd":   (*Session).WorkingDirectory,
+		"cd":    (*Session).ChangeDirectory,
 		"mkdir": (*Session).CreateDirectory,
-		"ls": (*Session).List,
-		"rm": (*Session).Remove,
-	//	"createsession": (*Session).CreateSession,
-	//	"recievesession": (*Session).RecieveSession,
-	//	"closesession": (*Session).CloseSession,
-	//	"updatechunk": (*Session).UpdateChunk,
-	//	"updaterecycle": (*Session).UpdateRecyce,
-	//	"sendfile": (*Session).SendFile,
-	//	"recievefile": (*Session).RecieveFile,
+		"ls":    (*Session).List,
+		"rm":    (*Session).Remove,
+		//	"createsession": (*Session).CreateSession,
+		//	"recievesession": (*Session).RecieveSession,
+		//	"closesession": (*Session).CloseSession,
+		//	"updatechunk": (*Session).UpdateChunk,
+		//	"updaterecycle": (*Session).UpdateRecyce,
+		//	"sendfile": (*Session).SendFile,
+		//	"recievefile": (*Session).RecieveFile,
 	}
-	
+
 	// create a session struct
 	session := Session{}
 	//session.Groups = make(map[string]TranferGroup)
 	session.ControlSocket = control_socket
-	
+
 	for {
 		command, err := ReadLine(session.ControlSocket)
 		if err != nil {
