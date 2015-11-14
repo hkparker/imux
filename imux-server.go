@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/hkparker/tlj"
 	"github.com/kless/osutil/user/crypt/sha512_crypt"
 	"github.com/twinj/uuid"
 	"io/ioutil"
@@ -35,12 +36,6 @@ func PrepareTLSConfig(pem, key string) tls.Config {
 		ClientCAs:    pool,
 	}
 	config.CipherSuites = []uint16{
-		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256}
 	config.MinVersion = tls.VersionTLS12
@@ -48,7 +43,6 @@ func PrepareTLSConfig(pem, key string) tls.Config {
 	return config
 }
 
-// Read /etc/shadow and return the password hash and salt
 func LookupHashAndHeader(username string) (string, string) {
 	file, err := os.Open("/etc/shadow")
 	if err != nil {
@@ -72,6 +66,23 @@ func LookupHashAndHeader(username string) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+func Login(username, password string) bool {
+	account, err := user.Lookup(username)
+	if err != nil {
+		return false
+	}
+	passwd_crypt := sha512_crypt.New()
+	hash, header := LookupHashAndHeader(username)
+	new_hash, err := passwd_crypt.Generate([]byte(password), []byte(header))
+	if err != nil {
+		return false
+	}
+	if new_hash != hash {
+		return false
+	}
+	return true
 }
 
 // Authenticate user and setup session process running as user
@@ -168,17 +179,34 @@ func NewTLJServer() {
 	server.AcceptRequest(
 		"all",
 		reflect.TypeOf(AuthRequest{}),
-		func(iface interface{}, responder Responder) {
+		func(iface interface{}, responder tlj.Responder) {
 			if auth_request, ok := iface.(*AuthRequest); ok {
-				// authenticate the data in the auth request
+				if Login(auth_request.Username, auth_request.Password) {
+					// generate a nonce and send it back
+					responder.Respond(Message{
+						String: "",
+					})
+				} else {
+					time.Sleep(10 * time.Second)
+					responder.Respond(Message{
+						String: "failed",
+					})
+				}
 			}
 		},
 	)
 
+	server.AcceptRequest(
+		"",
+		reflect.TypeOf(),
+		func(iface interface{}, responder tlj.Responder) {
+		},
+	)
 }
 
 func main() {
 	// flag for daemon mode
+	// flag for port
 
 	// Ensure server is running as root
 	if current_user, _ := user.Current(); current_user.Uid != "0" {

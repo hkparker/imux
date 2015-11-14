@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/hkparker/TLJ"
 	"log"
+	"net"
 	"os"
 	"os/user"
 	"reflect"
@@ -64,6 +65,7 @@ func ParseNetworks(data string) map[string]int {
 }
 
 func ReadPassword() string {
+	// print password: then disable echo and get input
 	return ""
 }
 
@@ -97,10 +99,16 @@ func TeardownRouting(change string) {
 }
 
 func TrustDialog(signature string) (bool, bool) {
+	// show sig, options are to
+	// abort connection
+	// continue but dont save
+	// continue and save
 	return true, true
 }
 
 func MitMWarning(new_signature, old_signature string) (bool, bool) {
+	// print new sig doesn't match old sig
+	// select to abort, continue but dont save, continue and save
 	return true, true
 }
 
@@ -140,9 +148,10 @@ func CreateClient(ip string, port int) (tlj.Client, error) {
 	return client, nil
 }
 
-func BuildWorkers(hostname string, port int, networks map[string]int, nonce string) {
-	total := 200 // networks.all_int
-	built := make(chan bool, total)
+func BuildWorkers(hostname string, port int, networks map[string]int, nonce string) []net.Conn {
+	built := make(chan bool)
+	created := make(chan net.Conn)
+	workers := make([]net.Conn)
 	for local_bind, count := range networks {
 		for i := 0; i < count; i++ {
 			go func() {
@@ -157,7 +166,6 @@ func BuildWorkers(hostname string, port int, networks map[string]int, nonce stri
 				}
 				type_store := BuildTypeStore()
 				client := tlj.NewClient(conn, &type_store)
-				// save these for uploading
 				req, err := client.Request(WorkerReady{
 					Nonce: nonce,
 				})
@@ -172,42 +180,56 @@ func BuildWorkers(hostname string, port int, networks map[string]int, nonce stri
 					}
 				})
 				built <- true
+				created <- client
 			}()
 		}
 	}
-	// for each one that was attempted, get a yes or no on success then return (print status along the way?)
+	for _, count := range networks {
+		for i := 0; i < count; i++ {
+			success := <-built
+			if success {
+				workers = append(workers, <-created...)
+				// print updated socket build status
+			} else {
+				// print updated socket build status
+			}
+		}
+	}
+	// print everything finished in n minutes
+	return workers
 }
 
-func CommandLoop(client tlj.Client) {
+func CommandLoop(client tlj.Client, workers []net.Conn) {
 	// read command from command line
-	// tlj message it
-	// wait for some i(one?) reasponse and print it to the terminal
+	// if get, send a download request to start it
+	// if put, tell the workers to start Messaging (blocking for prints)
+	// if exit, close up pretty
+	// if none of those, send it to the server and print the response
 }
 
 func main2() {
 	u, _ := user.Current()
-	current_user := u.Username
-	var username = flag.String("user", current_user, "username")
-	var hostname = flag.String("host", "", "hostname")
-	var port = flag.Int("port", 995, "port")
-	var network_config = flag.String("networks", "0.0.0.0:10", "socket configuration string: 0.0.0.0:200;192.168.1.3:50;")
-	var route = flag.Bool("route", false, "setup ip routing table")
-	var reset = flag.Bool("reset", false, "reset the socket after each chunk is transferred")
-	var chunk_size = flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
+	var username = &flag.String("user", u.Username, "username")
+	var hostname = &flag.String("host", "", "hostname")
+	var port = &flag.Int("port", 995, "port")
+	var network_config = &flag.String("networks", "0.0.0.0:200", "socket configuration string: 0.0.0.0:200;192.168.1.3:50;")
+	var route = &flag.Bool("route", false, "setup ip routing table")
+	var reset = &flag.Bool("reset", false, "reset the socket after each chunk is transferred")
+	var chunk_size = &flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 	flag.Parse()
-	networks := ParseNetworks(*network_config)
-	if *route {
+	networks := ParseNetworks(network_config)
+	if route {
 		change := SetupRouting(networks)
 		defer TeardownRouting(change)
 	}
-	client, err := CreateClient(*hostname, *port)
+	client, err := CreateClient(hostname, port)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	nonce := Login(*username, client)
-	BuildWorkers(*hostname, *port, networks, nonce) //return and send to command loop for upload
-	go CommandLoop(client)
+	nonce := Login(username, client)
+	workers := BuildWorkers(hostname, port, networks, nonce)
+	go CommandLoop(client, workers)
 	<-client.Dead
 	log.Println("control connection closed")
 }
