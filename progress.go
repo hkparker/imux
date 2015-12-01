@@ -9,7 +9,7 @@ import (
 func PrintProgress(completed_files, statuses, finished chan string) {
 	last_status := ""
 	for {
-		last_len := 0
+		//last_len := 0
 		select {
 		case completed_file := <-completed_files:
 			fmt.Printf("\r")

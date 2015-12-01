@@ -63,7 +63,8 @@ func (session *Session) List(args []string) {
 	}
 	items := make([]Entry, 0)
 	for _, f := range files {
-		item := Entry{Name: f.Name(),
+		item := Entry{
+			Name:  f.Name(),
 			Size:  f.Size(),
 			Perms: f.Mode().String(),
 			Mod:   f.ModTime().Format("01/02/2006 3:04PM"),

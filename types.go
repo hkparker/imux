@@ -43,7 +43,7 @@ func NewWorkerReady(data []byte) interface{} {
 	if err != nil {
 		return nil
 	}
-	return worker_Ready
+	return worker_ready
 }
 
 type Chunk struct {

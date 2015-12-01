@@ -87,45 +87,6 @@ func Login(username, password string) bool {
 
 // Authenticate user and setup session process running as user
 func ProcessSessionRequest(conn net.Conn) {
-	// Read username and password from socket
-	defer conn.Close()
-	creds, err := ReadBytes(conn)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	credentials := strings.Fields(string(creds))
-	if len(credentials) != 2 {
-		return
-	}
-	username := credentials[0]
-	password := credentials[1]
-
-	// Authenticate account against /etc/shadow
-	authentication_failed := false
-	context := ""
-	account, err := user.Lookup(username)
-	if err != nil {
-		authentication_failed = true
-		context = "user doesn't exist"
-	} else {
-		passwd_crypt := sha512_crypt.New()
-		stored_hash, header := LookupHashAndHeader(username)
-		new_hash, err := passwd_crypt.Generate([]byte(password), []byte(header))
-		if err != nil {
-			log.Fatal(err)
-		}
-		if new_hash != stored_hash {
-			authentication_failed = true
-			context = "incorrect password"
-		}
-	}
-
-	// Create process as user if authenticated
-	if authentication_failed {
-		log.Printf("authentication error from %s as user %s", username, context)
-		conn.Write([]byte(fmt.Sprintf("%s", "Authentication failure")))
-	} else {
 		log.Printf("successful login as %s from %s", username, conn.RemoteAddr())
 		conn.Write([]byte(fmt.Sprintf("%s", "Authentication successful")))
 
@@ -170,7 +131,7 @@ func ProcessSessionRequest(conn net.Conn) {
 		}
 	}
 
-	log.Printf("connection from %s closed", conn.RemoteAddr())
+	//log.Printf("connection from %s closed", conn.RemoteAddr())
 }
 
 func NewTLJServer() {

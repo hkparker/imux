@@ -2,19 +2,17 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/hkparker/TLJ"
 	"log"
-	"net"
 	"os"
 	"os/user"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -49,15 +47,10 @@ func AppendHost(hostname string, signature string) {
 }
 
 func SHA256Sig(conn *tls.Conn) string {
-	signature := sha256.Sum256(conn.ConnectionState().PeerCertificates[0].Signature)
-	var characters bytes.Buffer
-	for i, chr := range signature {
-		characters.WriteString(strconv.Itoa(int(chr)))
-		if i != 31 {
-			characters.WriteString(":")
-		}
-	}
-	return characters.String()
+	sig := conn.ConnectionState().PeerCertificates[0].Signature
+	sha := sha256.Sum256(sig)
+	str := hex.EncodeToString(sha[:])
+	return str
 }
 
 func ParseNetworks(data string) map[string]int {
@@ -98,25 +91,67 @@ func TeardownRouting(change string) {
 
 }
 
-func TrustDialog(signature string) (bool, bool) {
-	// show sig, options are to
-	// abort connection
-	// continue but dont save
-	// continue and save
-	return true, true
+func TrustDialog(hostname, signature string) (bool, bool) {
+	fmt.Println(fmt.Sprintf(
+		"%s presents certificate with signature:\n%s",
+		hostname,
+		signature,
+	))
+	fmt.Println("[A]bort, [C]ontinue without saving, [S]ave and continue?")
+	connect := false
+	save := false
+	stdin := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("> ")
+		line, _ := stdin.ReadString('\n')
+		text := strings.TrimSpace(line)
+		if text == "A" {
+			break
+		} else if text == "C" {
+			connect = true
+			break
+		} else if text == "S" {
+			connect = true
+			save = true
+			break
+		}
+	}
+	return connect, save
 }
 
 func MitMWarning(new_signature, old_signature string) (bool, bool) {
-	// print new sig doesn't match old sig
-	// select to abort, continue but dont save, continue and save
-	return true, true
+	fmt.Println(
+		"WARNING: Remote certificate has changed!!\nold: %s\nnew: %s",
+		old_signature,
+		new_signature,
+	)
+	fmt.Println("[A]bort, [C]ontinue without updating, [U]pdate and continue?")
+	connect := false
+	update := false
+	stdin := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("> ")
+		line, _ := stdin.ReadString('\n')
+		text := strings.TrimSpace(line)
+		if text == "A" {
+			break
+		} else if text == "C" {
+			connect = true
+			break
+		} else if text == "U" {
+			connect = true
+			update = true
+			break
+		}
+	}
+	return connect, update
 }
 
-func CreateClient(ip string, port int) (tlj.Client, error) {
+func CreateClient(hostname string, port int) (tlj.Client, error) {
 	known_hosts := LoadKnownHosts()
 	conn, err := tls.Dial(
 		"tcp",
-		fmt.Sprintf("%s:%d", ip, port),
+		fmt.Sprintf("%s:%d", hostname, port),
 		&tls.Config{InsecureSkipVerify: true},
 	)
 	if err != nil {
@@ -131,15 +166,15 @@ func CreateClient(ip string, port int) (tlj.Client, error) {
 				return tlj.Client{}, errors.New("TLS certificate mismatch")
 			}
 			if update {
-				AppendHost(ip, signature)
+				AppendHost(hostname, signature)
 			}
 		}
 	} else {
-		connect, save_cert := TrustDialog(signature)
+		connect, save_cert := TrustDialog(hostname, signature)
 		if !connect {
 			return tlj.Client{}, errors.New("TLS certificate rejected by user")
 		} else if save_cert {
-			AppendHost(ip, signature)
+			AppendHost(hostname, signature)
 		}
 	}
 
@@ -148,10 +183,10 @@ func CreateClient(ip string, port int) (tlj.Client, error) {
 	return client, nil
 }
 
-func BuildWorkers(hostname string, port int, networks map[string]int, nonce string) []net.Conn {
+func BuildWorkers(hostname string, port int, networks map[string]int, nonce string) []tlj.Client {
 	built := make(chan bool)
-	created := make(chan net.Conn)
-	workers := make([]net.Conn)
+	created := make(chan tlj.Client)
+	workers := make([]tlj.Client, 0)
 	for local_bind, count := range networks {
 		for i := 0; i < count; i++ {
 			go func() {
@@ -160,6 +195,7 @@ func BuildWorkers(hostname string, port int, networks map[string]int, nonce stri
 					fmt.Sprintf("%s:%d", hostname, port),
 					&tls.Config{},
 				)
+				fmt.Println(local_bind)
 				if err != nil {
 					built <- false
 					return
@@ -175,6 +211,7 @@ func BuildWorkers(hostname string, port int, networks map[string]int, nonce stri
 				}
 				req.OnResponse(reflect.TypeOf(Chunk{}), func(iface interface{}) {
 					if chunk, ok := iface.(*Chunk); ok {
+						fmt.Println(chunk)
 						// find or build the currect buffer for this chunk
 						// send this chunk to the buffer
 					}
@@ -188,7 +225,7 @@ func BuildWorkers(hostname string, port int, networks map[string]int, nonce stri
 		for i := 0; i < count; i++ {
 			success := <-built
 			if success {
-				workers = append(workers, <-created...)
+				workers = append(workers, <-created)
 				// print updated socket build status
 			} else {
 				// print updated socket build status
@@ -199,7 +236,7 @@ func BuildWorkers(hostname string, port int, networks map[string]int, nonce stri
 	return workers
 }
 
-func CommandLoop(client tlj.Client, workers []net.Conn) {
+func CommandLoop(control tlj.Client, workers []tlj.Client) {
 	// read command from command line
 	// if get, send a download request to start it
 	// if put, tell the workers to start Messaging (blocking for prints)
@@ -207,29 +244,31 @@ func CommandLoop(client tlj.Client, workers []net.Conn) {
 	// if none of those, send it to the server and print the response
 }
 
-func main2() {
+func main() {
 	u, _ := user.Current()
-	var username = &flag.String("user", u.Username, "username")
-	var hostname = &flag.String("host", "", "hostname")
-	var port = &flag.Int("port", 995, "port")
-	var network_config = &flag.String("networks", "0.0.0.0:200", "socket configuration string: 0.0.0.0:200;192.168.1.3:50;")
-	var route = &flag.Bool("route", false, "setup ip routing table")
-	var reset = &flag.Bool("reset", false, "reset the socket after each chunk is transferred")
-	var chunk_size = &flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
+	var username = flag.String("user", u.Username, "username")
+	var hostname = flag.String("host", "", "hostname")
+	var port = flag.Int("port", 443, "port")
+	var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
+	var route = flag.Bool("route", false, "setup ip routing table")
+	var reset = flag.Bool("reset", false, "reset the socket after each chunk is transferred")
+	var chunk_size = flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 	flag.Parse()
-	networks := ParseNetworks(network_config)
-	if route {
+	networks := ParseNetworks(*network_config)
+	if *route {
 		change := SetupRouting(networks)
 		defer TeardownRouting(change)
 	}
-	client, err := CreateClient(hostname, port)
+	client, err := CreateClient(*hostname, *port)
 	if err != nil {
-		log.Println(err)
+		fmt.Println(err)
 		return
 	}
-	nonce := Login(username, client)
-	workers := BuildWorkers(hostname, port, networks, nonce)
+	nonce := Login(*username, client)
+	workers := BuildWorkers(*hostname, *port, networks, nonce)
+	fmt.Println(*reset)
+	fmt.Println(*chunk_size)
 	go CommandLoop(client, workers)
 	<-client.Dead
-	log.Println("control connection closed")
+	fmt.Println("control connection closed")
 }
