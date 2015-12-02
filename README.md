@@ -10,9 +10,14 @@ Installation
 
 **Server**
 
-	* Linux (requires unix sockets and authenticates against /etc/shadow)
-	* github.com/kless/osutil/user/crypt/sha512_crypt
+* Linux (requires unix sockets and authenticates against /etc/shadow)
+* `go get github.com/kless/osutil/user/crypt/sha512_crypt`
+* `go get github.com/hkparker/TLJ`
 
+**Client**
+
+* `go get github.com/hkparker/TLJ`
+* `go get golang.org/x/crypto/ssh/terminal`
 
 ### Building the server ###
 
