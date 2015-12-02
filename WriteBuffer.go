@@ -28,7 +28,7 @@ func (buffer *WriteBuffer) Dump(file *os.File) {
 		chunk := buffer.Queue[0]
 		if chunk.ID == buffer.LastDump+1 {
 			buffer.Queue = buffer.Queue[1:]
-			file.Write(chunk.Data)
+			file.Write([]byte(chunk.Data))
 			buffer.LastDump = buffer.LastDump + 1
 		} else {
 			break

@@ -6,18 +6,22 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/hkparker/tlj"
+	"github.com/hkparker/TLJ"
 	"github.com/kless/osutil/user/crypt/sha512_crypt"
-	"github.com/twinj/uuid"
+	"net"
+	"reflect"
+	//"github.com/twinj/uuid"
 	"io/ioutil"
 	"log"
-	"net"
+	//"net"
+	"flag"
 	"os"
-	"os/exec"
+	//"os/exec"
 	"os/user"
-	"strconv"
+	//"strconv"
 	"strings"
-	"syscall"
+	//"syscall"
+	"time"
 )
 
 func PrepareTLSConfig(pem, key string) tls.Config {
@@ -35,9 +39,9 @@ func PrepareTLSConfig(pem, key string) tls.Config {
 		Certificates: []tls.Certificate{cert},
 		ClientCAs:    pool,
 	}
-	config.CipherSuites = []uint16{
-		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256}
+	//config.CipherSuites = []uint16{
+	//	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	//	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256}
 	config.MinVersion = tls.VersionTLS12
 	config.Rand = rand.Reader
 	return config
@@ -69,7 +73,7 @@ func LookupHashAndHeader(username string) (string, string) {
 }
 
 func Login(username, password string) bool {
-	account, err := user.Lookup(username)
+	_, err := user.Lookup(username)
 	if err != nil {
 		return false
 	}
@@ -86,60 +90,62 @@ func Login(username, password string) bool {
 }
 
 // Authenticate user and setup session process running as user
-func ProcessSessionRequest(conn net.Conn) {
-		log.Printf("successful login as %s from %s", username, conn.RemoteAddr())
-		conn.Write([]byte(fmt.Sprintf("%s", "Authentication successful")))
+//func ProcessSessionRequest(conn net.Conn) {
+//	log.Printf("successful login as %s from %s", username, conn.RemoteAddr())
+//	conn.Write([]byte(fmt.Sprintf("%s", "Authentication successful")))
 
-		// Create a unix socket to pass commands from client to user process
-		uuid.SwitchFormat(uuid.CleanHyphen)
-		ipc_filename := "/tmp/multiplexity_" + uuid.NewV4().String()
-		ipc, err := net.Listen("unix", ipc_filename)
-		defer ipc.Close()
-		defer os.RemoveAll(ipc_filename)
-		uid, _ := strconv.Atoi(account.Uid)
-		gid, _ := strconv.Atoi(account.Gid)
-		os.Chown(ipc_filename, uid, gid)
+// Create a unix socket to pass commands from client to user process
+//	uuid.SwitchFormat(uuid.CleanHyphen)
+//	ipc_filename := "/tmp/multiplexity_" + uuid.NewV4().String()
+//	ipc, err := net.Listen("unix", ipc_filename)
+//	defer ipc.Close()
+//	defer os.RemoveAll(ipc_filename)
+//	uid, _ := strconv.Atoi(account.Uid)
+//	gid, _ := strconv.Atoi(account.Gid)
+//	os.Chown(ipc_filename, uid, gid)
 
-		// Create new process running under authenticated user's account
-		cmd := exec.Command("./Session", ipc_filename)
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
-		cmd.Start()
+// Create new process running under authenticated user's account
+//	cmd := exec.Command("./Session", ipc_filename)
+//	cmd.SysProcAttr = &syscall.SysProcAttr{}
+//	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+//	cmd.Start()
 
-		// Pass messages
-		ipc_session, err := ipc.Accept()
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		ipc_session.Write([]byte(fmt.Sprintf("cd %s", account.HomeDir)))
-		ReadBytes(ipc_session)
+// Pass messages
+//	ipc_session, err := ipc.Accept()
+//	if err != nil {
+//		log.Println(err)
+//		return
+//	}
+//	ipc_session.Write([]byte(fmt.Sprintf("cd %s", account.HomeDir)))
+//	ReadBytes(ipc_session)
+//
+//	for {
+//		bytes, err := ReadBytes(conn)
+//		if err != nil {
+//			log.Println(err)
+//			break
+//		}
+//		ipc_session.Write(bytes)
+//		bytes, err = ReadBytes(ipc_session)
+//		if err != nil {
+//			log.Println(err)
+//			break
+//		}
+//		conn.Write(bytes)
+//	}
+//}
 
-		for {
-			bytes, err := ReadBytes(conn)
-			if err != nil {
-				log.Println(err)
-				break
-			}
-			ipc_session.Write(bytes)
-			bytes, err = ReadBytes(ipc_session)
-			if err != nil {
-				log.Println(err)
-				break
-			}
-			conn.Write(bytes)
-		}
-	}
-
-	//log.Printf("connection from %s closed", conn.RemoteAddr())
+func TagSocketAll(socket net.Conn, server *tlj.Server) {
+	server.Tags[socket] = append(server.Tags[socket], "all")
+	server.Sockets["all"] = append(server.Sockets["all"], socket)
 }
 
-func NewTLJServer() {
-	server := tlj.NewServer()
-
+func NewTLJServer(listener net.Listener) tlj.Server {
+	type_store := BuildTypeStore()
+	server := tlj.NewServer(listener, TagSocketAll, &type_store)
 	server.AcceptRequest(
 		"all",
-		reflect.TypeOf(AuthRequest{}),
+		reflect.TypeOf(AuthRequest{}), // also accept nonceauth
 		func(iface interface{}, responder tlj.Responder) {
 			if auth_request, ok := iface.(*AuthRequest); ok {
 				if Login(auth_request.Username, auth_request.Password) {
@@ -148,7 +154,7 @@ func NewTLJServer() {
 						String: "",
 					})
 				} else {
-					time.Sleep(10 * time.Second)
+					time.Sleep(3 * time.Second)
 					responder.Respond(Message{
 						String: "failed",
 					})
@@ -157,38 +163,49 @@ func NewTLJServer() {
 		},
 	)
 
-	server.AcceptRequest(
-		"",
-		reflect.TypeOf(),
-		func(iface interface{}, responder tlj.Responder) {
-		},
-	)
+	//server.AcceptRequest(
+	//	"",
+	//	reflect.TypeOf(),
+	//	func(iface interface{}, responder tlj.Responder) {
+	//	},
+	//)
+
+	return server
 }
 
 func main() {
-	// flag for daemon mode
-	// flag for port
+	var listen = flag.String("listen", "0.0.0.0", "address to listen on")
+	var port = flag.Int("port", 443, "port to listen on")
+	//var daemon = flag.Bool("daemon", false, "run the server in the background")
+	var cert = flag.String("cert", "ca.pem", "pem file with certificate to present")
+	var key = flag.String("key", "ca.key", "pem file with key for certificate")
+	flag.Parse()
 
-	// Ensure server is running as root
 	if current_user, _ := user.Current(); current_user.Uid != "0" {
 		log.Fatal("Server must run as root.")
 	}
-
-	// Set logging to /var/log/multplexity.log
 	log_file, err := os.OpenFile("/var/log/multiplexity.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
-		log.Fatal("error opening log file: %s", err)
+		fmt.Println("can't open log")
+		return
 	}
 	defer log_file.Close()
 	log.SetOutput(log_file)
 	log.Println("starting imux server")
 
-	// Create TLS server for control sockets
-	config := PrepareTLSConfig("ca.pem", "ca.key")
-	server, err := tls.Listen("tcp", "0.0.0.0:8080", &config)
+	config := PrepareTLSConfig(*cert, *key)
+	address := fmt.Sprintf(
+		"%s:%d",
+		*listen,
+		*port,
+	)
+	listener, err := tls.Listen("tcp", address, &config)
 	if err != nil {
-		log.Fatal("error starting server: %s", err)
+		fmt.Println("error starting server: %s", err)
+		return
 	}
-	// staruup a TLJ server
-	// <-server dead
+
+	server := NewTLJServer(listener)
+	err = <-server.FailedServer
+	log.Println("server closed: %s", err)
 }
