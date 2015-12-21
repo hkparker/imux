@@ -21,7 +21,7 @@ Installation
 
 ### Building the server ###
 
-``
+`go build imux-server.go types.go`
 
 **Usage:**
 
@@ -36,6 +36,11 @@ Installation
 
 ```
 ```
+
+Example
+-------
+
+
 
 License
 -------

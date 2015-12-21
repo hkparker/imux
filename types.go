@@ -61,6 +61,20 @@ func NewChunk(data []byte) interface{} {
 	return chunk
 }
 
+type Command struct {
+	Command string
+	Args    []string
+}
+
+func NewCommand(data []byte) interface{} {
+	command := &Command{}
+	err := json.Unmarshal(data, &command)
+	if err != nil {
+		return nil
+	}
+	return command
+}
+
 func BuildTypeStore() tlj.TypeStore {
 	type_store := tlj.NewTypeStore()
 	type_store.AddType(
@@ -82,6 +96,11 @@ func BuildTypeStore() tlj.TypeStore {
 		reflect.TypeOf(Chunk{}),
 		reflect.TypeOf(&Chunk{}),
 		NewChunk,
+	)
+	type_store.AddType(
+		reflect.TypeOf(Command{}),
+		reflect.TypeOf(&Command{}),
+		NewCommand,
 	)
 	return type_store
 }

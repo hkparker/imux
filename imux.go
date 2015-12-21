@@ -93,7 +93,7 @@ func SHA256Sig(conn *tls.Conn) string {
 
 func ParseNetworks(data string) map[string]int {
 	networks := make(map[string]int)
-	networks["0.0.0.0"] = 2
+	networks["0.0.0.0"] = 200
 	return networks
 }
 
@@ -255,8 +255,11 @@ func BuildWorkers(
 				conn, err := tls.Dial(
 					"tcp",
 					fmt.Sprintf("%s:%d", hostname, port),
-					&tls.Config{},
+					&tls.Config{
+						InsecureSkipVerify: true,
+					},
 					// need to specify local bind
+					// need to check sig or let it slice based on user selection
 				)
 				//fmt.Println(local_bind) // then remove this
 				if err != nil {
@@ -272,6 +275,8 @@ func BuildWorkers(
 					built <- false
 					return
 				}
+				req.OnResponse(reflect.TypeOf(Message{}), func(iface interface{}) {
+				})
 				req.OnResponse(reflect.TypeOf(Chunk{}), func(iface interface{}) { // chunk in TLJ isn't the same thing as chunk in WriteBuffer....
 					if _, ok := iface.(*Chunk); ok {
 						// find or build the currect buffer for this chunk
@@ -284,6 +289,7 @@ func BuildWorkers(
 						// need to unpack the base64 data and buld the inner chunk
 					}
 				})
+				// on response "nonce ok", send bult and created
 				built <- true
 				created <- client
 			}()
@@ -326,11 +332,41 @@ func BuildWorkers(
 }
 
 func CommandLoop(control tlj.Client, workers []tlj.Client) {
-	// read command from command line
-	// if get, send a download request to start it
-	// if put, tell the workers to start Messaging (blocking for prints)
-	// if exit, close up pretty
-	// if none of those, send it to the server and print the response
+	stdin := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("imux> ")
+		line, _ := stdin.ReadString('\n')
+		text := strings.TrimSpace(line)
+		// breakup by whitespace
+		if text == "get" {
+			// send a Command{} with get and the files as args (server wont respond, will just stream chunks down nonced workers)
+			// start PrintProgress() (returning with it, when it finishes blocking)
+		} else if text == "put" {
+			// tell the workers to start messaging a chunk (server knowns what to do)
+			// start PrintProgress() (returning with it, when it finishes blocking)
+		} else if text == "exit" {
+			control.Dead <- errors.New("user exit")
+			break
+		} else {
+			req, err := control.Request(Command{
+				Command: text,
+				Args:    make([]string, 0),
+			})
+			if err != nil {
+				go func() {
+					control.Dead <- errors.New(fmt.Sprintf("error sending command: %v", err))
+				}()
+				break
+			}
+			command_output := make(chan string)
+			req.OnResponse(reflect.TypeOf(Message{}), func(iface interface{}) {
+				if message, ok := iface.(*Message); ok {
+					command_output <- message.String
+				}
+			})
+			fmt.Println(<-command_output)
+		}
+	}
 }
 
 func main() {
@@ -362,6 +398,6 @@ func main() {
 		return
 	}
 	go CommandLoop(client, workers)
-	<-client.Dead
-	fmt.Println("control connection closed")
+	err = <-client.Dead
+	fmt.Println("control connection closed:", err)
 }

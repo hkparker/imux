@@ -21,8 +21,18 @@ import (
 	//"strconv"
 	"strings"
 	//"syscall"
+	"encoding/base64"
 	"time"
 )
+
+func NewNonce() (string, error) {
+	bytes := make([]byte, 64)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
+}
 
 func PrepareTLSConfig(pem, key string) tls.Config {
 	ca_b, _ := ioutil.ReadFile(pem)
@@ -145,14 +155,18 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 	server := tlj.NewServer(listener, TagSocketAll, &type_store)
 	server.AcceptRequest(
 		"all",
-		reflect.TypeOf(AuthRequest{}), // also accept nonceauth
+		reflect.TypeOf(AuthRequest{}),
 		func(iface interface{}, responder tlj.Responder) {
 			if auth_request, ok := iface.(*AuthRequest); ok {
 				if Login(auth_request.Username, auth_request.Password) {
-					// generate a nonce and send it back
-					responder.Respond(Message{
-						String: "",
-					})
+					nonce, err := NewNonce()
+					if err == nil {
+						//tag as authenticated
+						// store in global data tsructre
+						responder.Respond(Message{
+							String: nonce,
+						})
+					}
 				} else {
 					time.Sleep(3 * time.Second)
 					responder.Respond(Message{
@@ -160,6 +174,15 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 					})
 				}
 			}
+		},
+	)
+
+	server.AcceptRequest(
+		"all",
+		reflect.TypeOf(WorkerReady{}),
+		func(iface interface{}, responder tlj.Responder) {
+			// repond with an OK
+			// any time a chunk needs to come down, repond with it (create a chan in the global namespace if missing, read from that?)
 		},
 	)
 
