@@ -93,7 +93,7 @@ func SHA256Sig(conn *tls.Conn) string {
 
 func ParseNetworks(data string) map[string]int {
 	networks := make(map[string]int)
-	networks["0.0.0.0"] = 200
+	networks["0.0.0.0"] = 2
 	return networks
 }
 
@@ -337,20 +337,25 @@ func CommandLoop(control tlj.Client, workers []tlj.Client) {
 		fmt.Print("imux> ")
 		line, _ := stdin.ReadString('\n')
 		text := strings.TrimSpace(line)
-		// breakup by whitespace
-		if text == "get" {
-			// send a Command{} with get and the files as args (server wont respond, will just stream chunks down nonced workers)
-			// start PrintProgress() (returning with it, when it finishes blocking)
-		} else if text == "put" {
+		cmd := strings.Fields(text)
+		command := cmd[0]
+		args := cmd[1:] // panic on ^D
+		if command == "get" {
+			// send a Command{} with get and the files as args (server wont respond (or does it need to respond when all done and with updates?), will just stream chunks down nonced workers)
+			// start PrintProgress() (returning with it, when it finishes blocking) (for example doing three OnResponses so that each one has a unique print progress call)
+		} else if command == "put" {
 			// tell the workers to start messaging a chunk (server knowns what to do)
 			// start PrintProgress() (returning with it, when it finishes blocking)
-		} else if text == "exit" {
+		} else if command == "exit" {
+			control.Request(Command{
+				Command: "exit",
+			})
 			control.Dead <- errors.New("user exit")
 			break
 		} else {
 			req, err := control.Request(Command{
-				Command: text,
-				Args:    make([]string, 0),
+				Command: command,
+				Args:    args,
 			})
 			if err != nil {
 				go func() {
@@ -377,7 +382,7 @@ func main() {
 	var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
 	var route = flag.Bool("route", false, "setup ip routing table")
 	var reset = flag.Bool("reset", false, "reset the socket after each chunk is transferred")
-	var resume = flag.Bool("resume", false, "resume transfers if a part of the file already exists on the destination")
+	var resume = flag.Bool("resume", true, "resume transfers if a part of the file already exists on the destination")
 	var chunk_size = flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 	flag.Parse()
 	networks := ParseNetworks(*network_config)
