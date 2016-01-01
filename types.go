@@ -75,6 +75,12 @@ func NewCommand(data []byte) interface{} {
 	return command
 }
 
+type TransferChunk struct {
+}
+
+type IncomingFileList struct {
+}
+
 func BuildTypeStore() tlj.TypeStore {
 	type_store := tlj.NewTypeStore()
 	type_store.AddType(
