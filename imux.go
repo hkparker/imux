@@ -222,10 +222,7 @@ func BuildWorkers(
 	port int,
 	networks map[string]int,
 	nonce string,
-	reset bool,
-	chunk_size int,
 	resume bool,
-	buffers *[]WriteBuffer,
 ) ([]tlj.Client, error) {
 	print_progress := make(chan string)
 	print_status := make(chan string)
@@ -266,8 +263,8 @@ func BuildWorkers(
 					built <- false
 					return
 				}
-				req.OnResponse(reflect.TypeOf(Chunk{}), func(iface interface{}) { // chunk in TLJ isn't the same thing as chunk in WriteBuffer....
-					if _, ok := iface.(*Chunk); ok {
+				req.OnResponse(reflect.TypeOf(TransferChunk{}), func(iface interface{}) {
+					if _, ok := iface.(*TransferChunk); ok {
 						// find or build the currect buffer for this chunk
 						// send this chunk to the buffer
 						//if buffers[chunk.Data] == nil {
@@ -319,7 +316,7 @@ func BuildWorkers(
 	return workers, nil
 }
 
-func CommandLoop(control tlj.Client, workers []tlj.Client) {
+func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 	stdin := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("imux> ")
@@ -336,10 +333,44 @@ func CommandLoop(control tlj.Client, workers []tlj.Client) {
 		}
 		if command == "get" {
 			// send a Command{} with get and the files as args (server wont respond (or does it need to respond when all done and with updates?), will just stream chunks down nonced workers)
-			// start PrintProgress() (returning with it, when it finishes blocking) (for example doing three OnResponses so that each one has a unique print progress call)
+			// file finished are send by write buffer to global current_transfer chan
+			// speed updates are 1 per second?  need to ask every worker?  (workers update global speed store, sum that)
+			//PrintProgress(file_finished, speed_update, all_done)
 		} else if command == "put" {
-			// tell the workers to start messaging a chunk (server knowns what to do)
-			// start PrintProgress() (returning with it, when it finishes blocking)
+			file_list := ParseFileList(args)
+			chunks := CreatePooledChunkChan(file_list, chunk_size)
+			file_finished := make(chan string)
+			file_finished_print := make(chan string)
+			status_update := make(chan string)
+			all_done := make(chan string)
+			worker_speeds := make(map[int]int)
+			finished := false
+			for iter, worker := range workers {
+				worker_speeds[iter] = 0
+				speed_update := make(chan int)
+				go StreamChunksToPut(worker, chunks)
+				go func() {
+					for speed := range speed_update {
+						worker_speeds[iter] = speed
+					}
+				}()
+			}
+			go func() {
+				for _, _ = range file_list {
+					filename := <-file_finished
+					file_finished_print <- fmt.Sprintf("file finished %s", filename)
+				}
+				all_done <- "blah transferred in blah time"
+				finished = true
+			}()
+			go func() {
+				if finished {
+					return
+				}
+				status_update <- "pool the map and update"
+				time.Sleep(1 * time.Second)
+			}()
+			PrintProgress(file_finished_print, status_update, all_done)
 		} else if command == "exit" {
 			control.Request(Command{
 				Command: "exit",
@@ -374,7 +405,6 @@ func main() {
 	var hostname = flag.String("host", "", "hostname")
 	var port = flag.Int("port", 443, "port")
 	var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
-	var reset = flag.Bool("reset", false, "reset the socket after each chunk is transferred")
 	var resume = flag.Bool("resume", true, "resume transfers if a part of the file already exists on the destination")
 	var chunk_size = flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 	flag.Parse()
@@ -385,13 +415,12 @@ func main() {
 		return
 	}
 	nonce := Login(*username, client)
-	buffers := make([]WriteBuffer, 0)
-	workers, err := BuildWorkers(*hostname, *port, networks, nonce, *reset, *chunk_size, *resume, &buffers)
+	workers, err := BuildWorkers(*hostname, *port, networks, nonce, *resume)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	go CommandLoop(client, workers)
+	go CommandLoop(client, workers, *chunk_size)
 	err = <-client.Dead
 	fmt.Println("control connection closed:", err)
 }

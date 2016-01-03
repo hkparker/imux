@@ -46,14 +46,14 @@ func NewWorkerReady(data []byte) interface{} {
 	return worker_ready
 }
 
-type Chunk struct {
+type TransferChunk struct {
 	Filename string
 	ID       int
 	Data     string
 }
 
-func NewChunk(data []byte) interface{} {
-	chunk := &Chunk{}
+func NewTransferChunk(data []byte) interface{} {
+	chunk := &TransferChunk{}
 	err := json.Unmarshal(data, &chunk)
 	if err != nil {
 		return nil
@@ -75,12 +75,6 @@ func NewCommand(data []byte) interface{} {
 	return command
 }
 
-type TransferChunk struct {
-}
-
-type IncomingFileList struct {
-}
-
 func BuildTypeStore() tlj.TypeStore {
 	type_store := tlj.NewTypeStore()
 	type_store.AddType(
@@ -99,9 +93,9 @@ func BuildTypeStore() tlj.TypeStore {
 		NewWorkerReady,
 	)
 	type_store.AddType(
-		reflect.TypeOf(Chunk{}),
-		reflect.TypeOf(&Chunk{}),
-		NewChunk,
+		reflect.TypeOf(TransferChunk{}),
+		reflect.TypeOf(&TransferChunk{}),
+		NewTransferChunk,
 	)
 	type_store.AddType(
 		reflect.TypeOf(Command{}),

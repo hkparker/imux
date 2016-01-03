@@ -118,30 +118,22 @@ func DisplayHelp(_ []string) string {
 	directory := account.HomeDir
 	return "\nMultiplexity by hkparker\n" +
 		"\n\tFilesystem:\n\n" +
-		"\tls [directory || .]\tlist files\n" +
-		"\tcd [directory || " + directory + "]\tchange directory\n" +
-		"\tpwd\t\t\tprint working directory\n" +
-		"\tmkdir [dir < dir...>]\tcreate directories\n" +
-		"\trm [item < item...>]\tdestroy items (rm -rf)\n" +
+		"\tls [directory || .]\n" +
+		"\tcd [directory || " + directory + "]\n" +
+		"\tpwd\n" +
+		"\tmkdir [dir < dir...>]\n" +
+		"\trm [item < item...>]\n" +
 		"\n\tTransfer:\n\n" +
-		"\tget [item < item...>]\tdownload items\n" +
-		"\tput [item < item...>]\tupload items\n" +
+		"\tget [item < item...>]\n" +
+		"\tput [item < item...>]\n" +
 		"\n\tOther:\n\n" +
-		"\thelp\t\t\tprint this message\n" +
-		"\texit\t\t\tclose the client\n"
+		"\thelp\n" +
+		"\texit\n"
 }
 
 func TagSocketAll(socket net.Conn, server *tlj.Server) {
 	server.Tags[socket] = append(server.Tags[socket], "all")
 	server.Sockets["all"] = append(server.Sockets["all"], socket)
-}
-
-func StreamChunks() {
-
-}
-
-func StoreChunks() {
-
 }
 
 func NewTLJServer(listener net.Listener) tlj.Server {
@@ -155,8 +147,10 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 				if command.Command == "exit" {
 					os.Exit(0)
 				} else if command.Command == "get" {
-					// send a message back explaining what to expect (sizes and such)
-					// send the request files down the responder as chunks
+					//file_list := ParseFileList(command.Args)
+					//responder.Respond(Message{}) // file names and sizes... already part of previous return?
+					//chunks := CreatePooledChunkChan(file_list)
+					// send the requested files down the responder as chunks
 				} else if command.Command == "put" {
 				} else {
 					if function, present := commands[command.Command]; present {
@@ -172,11 +166,26 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 			}
 		},
 	)
+
+	server.Accept(
+		"all",
+		reflect.TypeOf(TransferChunk{}),
+		func(iface interface{}) {
+			if _, ok := iface.(*TransferChunk); ok {
+				// if buffers[chunk.destination_path] == nil {
+				// 	assign it to a new buffer
+				//}
+				// buffer.Insert(chunk)
+				//if buffer.LastWrite == file size {
+				// 	close the buffer
+				//}
+			}
+		},
+	)
 	return server
 }
 
 func main() {
-	fmt.Println("session executed")
 	ipc_file := os.Args[1]
 	control_socket, err := net.Dial("unix", ipc_file)
 	if err != nil {

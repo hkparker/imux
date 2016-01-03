@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"github.com/hkparker/TLJ"
 	"github.com/kless/osutil/user/crypt/sha512_crypt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -25,6 +24,7 @@ import (
 )
 
 var user_clients = make(map[string]tlj.Client)
+var good_nonce = make(map[string]string)
 
 func NewNonce() (string, error) {
 	bytes := make([]byte, 64)
@@ -109,16 +109,19 @@ func UsernameFromTags(tags []string) string {
 }
 
 func ForkUserProc(nonce, username string) {
-	account, _ := user.Lookup(username)
-	ipc_filename := "/tmp/multiplexity_" + nonce
-	uid, _ := strconv.Atoi(account.Uid)
-	gid, _ := strconv.Atoi(account.Gid)
-	os.Chown(ipc_filename, uid, gid)
-
 	client_created := make(chan bool, 1)
 	listening := make(chan bool, 1)
+	ipc_filename := "/tmp/multiplexity_" + nonce
+	account, _ := user.Lookup(username)
+	uid, _ := strconv.Atoi(account.Uid)
+	gid, _ := strconv.Atoi(account.Gid)
 	go func() {
 		ipc, err := net.Listen("unix", ipc_filename)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		err = os.Chown(ipc_filename, uid, gid)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -126,6 +129,7 @@ func ForkUserProc(nonce, username string) {
 		control_socket, err := ipc.Accept()
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 		type_store := BuildTypeStore()
 		client := tlj.NewClient(control_socket, &type_store)
@@ -137,9 +141,8 @@ func ForkUserProc(nonce, username string) {
 	cmd := exec.Command("./session", ipc_filename)
 	cmd.SysProcAttr = &syscall.SysProcAttr{}
 	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+	cmd.Stdout = os.Stdout
 	cmd.Start()
-	out, _ := cmd.StdoutPipe()
-	io.Copy(os.Stdout, out)
 	<-client_created
 }
 
@@ -165,6 +168,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 						server.Tags[responder.Socket] = append(server.Tags[responder.Socket], user_tag)
 						server.Sockets[user_tag] = append(server.Sockets[user_tag], responder.Socket)
 						ForkUserProc(nonce, auth_request.Username)
+						good_nonce[auth_request.Username] = nonce
 						responder.Respond(Message{
 							String: nonce,
 						})
@@ -183,22 +187,30 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 		"all",
 		reflect.TypeOf(WorkerReady{}),
 		func(iface interface{}, responder tlj.Responder) {
-			// tag as a worker so when chunks come from this socket they go to the correct place
-			// create the chunk distributor if needed
-			// 	for
-			// 		read from the chunk channel
-			// 		responder.Respond with the chunk
-			// 		break if there was an error
+			if worker_ready, ok := iface.(*WorkerReady); ok {
+				if username, ok := good_nonce[worker_ready.Nonce]; ok {
+					server.Tags[responder.Socket] = append(server.Tags[responder.Socket], worker_ready.Nonce)
+					server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], responder.Socket)
+					server.Accept(
+						worker_ready.Nonce,
+						reflect.TypeOf(TransferChunk{}),
+						func(iface interface{}) {
+							if chunk, ok := iface.(*TransferChunk); ok {
+								if client, ok := user_clients[username]; ok {
+									client.Message(chunk)
+								}
+							}
+						},
+					)
+					// create the chunk distributor if needed
+					// 	for
+					// 		read from the chunk channel
+					// 		responder.Respond with the chunk
+					// 		break if there was an error
+				}
+			}
 		},
 	)
-
-	//server.Accept(
-	//	"worker",
-	//	reflect.TypeOf(TransferChunk{}),
-	//	func(iface interface{}) {
-	//		cast it, look up the right user client, put it down that (lookup or create the write buffer there)
-	//	},
-	//)
 
 	server.AcceptRequest(
 		"control",
@@ -211,9 +223,9 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 					if err != nil {
 						fmt.Println(err)
 					}
-					//if command.Command == "exit" {
-					// close and remove
-					//}
+					if command.Command == "exit" {
+						delete(user_clients, username)
+					}
 					req.OnResponse(reflect.TypeOf(Message{}), func(iface interface{}) {
 						if message, cast := iface.(*Message); cast {
 							responder.Respond(message)
@@ -276,6 +288,9 @@ func main() {
 	}
 
 	server := NewTLJServer(listener)
+
+	// Daemonize
+
 	err = <-server.FailedServer
 	log.Println("server closed: %s", err)
 }
