@@ -25,6 +25,7 @@ import (
 
 var user_clients = make(map[string]tlj.Client)
 var good_nonce = make(map[string]string)
+var hooked_up = make(map[string]bool)
 
 func NewNonce() (string, error) {
 	bytes := make([]byte, 64)
@@ -151,6 +152,24 @@ func TagSocketAll(socket net.Conn, server *tlj.Server) {
 	server.Sockets["all"] = append(server.Sockets["all"], socket)
 }
 
+func HookupChunkAction(server tlj.Server, nonce, username string, user_clients map[string]tlj.Client) {
+	if ok, _ := hooked_up[nonce]; ok {
+		return
+	}
+	hooked_up[nonce] = true
+	server.Accept(
+		nonce,
+		reflect.TypeOf(TransferChunk{}),
+		func(iface interface{}) {
+			if chunk, ok := iface.(*TransferChunk); ok {
+				if client, ok := user_clients[username]; ok {
+					client.Message(chunk)
+				}
+			}
+		},
+	)
+}
+
 func NewTLJServer(listener net.Listener) tlj.Server {
 	type_store := BuildTypeStore()
 	server := tlj.NewServer(listener, TagSocketAll, &type_store)
@@ -191,17 +210,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 				if username, ok := good_nonce[worker_ready.Nonce]; ok {
 					server.Tags[responder.Socket] = append(server.Tags[responder.Socket], worker_ready.Nonce)
 					server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], responder.Socket)
-					server.Accept(
-						worker_ready.Nonce,
-						reflect.TypeOf(TransferChunk{}),
-						func(iface interface{}) {
-							if chunk, ok := iface.(*TransferChunk); ok {
-								if client, ok := user_clients[username]; ok {
-									client.Message(chunk)
-								}
-							}
-						},
-					)
+					HookupChunkAction(server, worker_ready.Nonce, username, user_clients)
 					// create the chunk distributor if needed
 					// 	for
 					// 		read from the chunk channel

@@ -23,8 +23,9 @@ func ParseFileList(items []string) []string {
 	return all_files
 }
 
-func CreatePooledChunkChan(files []string, chunk_size int) chan TransferChunk {
+func CreatePooledChunkChan(files []string, chunk_size int) (chan TransferChunk, chan string) {
 	all_chunks := make(chan TransferChunk, 0)
+	file_done := make(chan string, 0)
 	for _, file := range files {
 		queue := ReadQueue{
 			ChunkSize: chunk_size,
@@ -34,20 +35,20 @@ func CreatePooledChunkChan(files []string, chunk_size int) chan TransferChunk {
 			// assign destination name as
 			go queue.Process(fh)
 			go func() {
-				for {
-					all_chunks <- <-queue.Chunks
+				for chunk := range queue.Chunks {
+					all_chunks <- chunk
 				}
+				file_done <- file
 			}()
 		} else {
 			fmt.Println(err)
 		}
 	}
-	return all_chunks
+	return all_chunks, file_done
 }
 
 func StreamChunksToPut(worker tlj.Client, chunks chan TransferChunk) {
 	for chunk := range chunks {
-		fmt.Println("messaged a chunk")
 		// set start time
 		err := worker.Message(chunk) // instead do an action and have it also be responder.Respond
 		if err != nil {

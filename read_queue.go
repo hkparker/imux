@@ -33,7 +33,7 @@ func (queue *ReadQueue) Process(file *os.File) {
 		if bytes_read < queue.ChunkSize {
 			new_chunk_data = new_chunk_data[:bytes_read]
 		}
-		new_chunk.Data = string(new_chunk_data) // need to base64
+		new_chunk.Data = new_chunk_data
 		// assign the new_chunk's destinatino file name here?
 		queue.Chunks <- new_chunk
 	}

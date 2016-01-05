@@ -338,8 +338,7 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 			//PrintProgress(file_finished, speed_update, all_done)
 		} else if command == "put" {
 			file_list := ParseFileList(args)
-			chunks := CreatePooledChunkChan(file_list, chunk_size)
-			file_finished := make(chan string)
+			chunks, file_finished := CreatePooledChunkChan(file_list, chunk_size)
 			file_finished_print := make(chan string)
 			status_update := make(chan string)
 			all_done := make(chan string)
@@ -348,7 +347,7 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 			for iter, worker := range workers {
 				worker_speeds[iter] = 0
 				speed_update := make(chan int)
-				go StreamChunksToPut(worker, chunks)
+				go StreamChunksToPut(worker, chunks) //, speed_update
 				go func() {
 					for speed := range speed_update {
 						worker_speeds[iter] = speed
@@ -357,8 +356,7 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 			}
 			go func() {
 				for _, _ = range file_list {
-					filename := <-file_finished
-					file_finished_print <- fmt.Sprintf("file finished %s", filename)
+					file_finished_print <- <-file_finished
 				}
 				all_done <- "blah transferred in blah time"
 				finished = true

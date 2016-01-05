@@ -49,7 +49,7 @@ func NewWorkerReady(data []byte) interface{} {
 type TransferChunk struct {
 	Filename string
 	ID       int
-	Data     string
+	Data     []byte
 }
 
 func NewTransferChunk(data []byte) interface{} {
