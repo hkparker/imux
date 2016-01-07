@@ -12,7 +12,7 @@ func TagSocketAll(socket net.Conn, server *tlj.Server) {
 	server.Sockets["all"] = append(server.Sockets["all"], socket)
 }
 
-func ParseFileList(items []string) []string {
+func ParseFileList(items []string) ([]string, int) {
 	// for each string which should be a full path
 	// if it is a directory
 	all_files := items //make([]string, 0)
@@ -20,7 +20,7 @@ func ParseFileList(items []string) []string {
 	// if the item is a readable file, add it to the list
 	//}
 	//walk
-	return all_files
+	return all_files, 100 // also return the sinze in bytes of all files
 }
 
 func CreatePooledChunkChan(files []string, chunk_size int) (chan TransferChunk, chan string) {
@@ -47,7 +47,7 @@ func CreatePooledChunkChan(files []string, chunk_size int) (chan TransferChunk, 
 	return all_chunks, file_done
 }
 
-func StreamChunksToPut(worker tlj.Client, chunks chan TransferChunk) {
+func StreamChunksToPut(worker tlj.Client, chunks chan TransferChunk, speed_update, total_update chan int) {
 	for chunk := range chunks {
 		// set start time
 		err := worker.Message(chunk) // instead do an action and have it also be responder.Respond
@@ -55,6 +55,6 @@ func StreamChunksToPut(worker tlj.Client, chunks chan TransferChunk) {
 			// make this chunk stale for the read queue?
 		}
 		// if this was the last chunk for a file, send back that the update was success
-		// take note of elapsed time and chunk size, update my speed
+		// take note of elapsed time and chunk size, update my speed, update amount moved
 	}
 }

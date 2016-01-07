@@ -187,7 +187,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 						server.Tags[responder.Socket] = append(server.Tags[responder.Socket], user_tag)
 						server.Sockets[user_tag] = append(server.Sockets[user_tag], responder.Socket)
 						ForkUserProc(nonce, auth_request.Username)
-						good_nonce[auth_request.Username] = nonce
+						good_nonce[nonce] = auth_request.Username
 						responder.Respond(Message{
 							String: nonce,
 						})

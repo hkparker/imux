@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/dustin/go-humanize"
 	"github.com/hkparker/TLJ"
 	"golang.org/x/crypto/ssh/terminal"
 	"log"
@@ -297,12 +298,7 @@ func BuildWorkers(
 			)
 		}
 	}
-	duration := time.Since(start)
-	elapsed := fmt.Sprintf(
-		"%dm%ds",
-		int(duration.Minutes()),
-		int(duration.Seconds()),
-	)
+	elapsed := time.Since(start).String()
 	print_finished <- fmt.Sprintf(
 		"%d/%d transfer sockets built, %d failed in %s",
 		total_built,
@@ -314,6 +310,13 @@ func BuildWorkers(
 		return workers, errors.New("all transfer sockets failed to build")
 	}
 	return workers, nil
+}
+
+func TimeRemaining(speed, remaining int) string {
+	seconds_left := float64(remaining) / float64(speed)
+	fmt.Println(fmt.Sprintf("%fs", seconds_left))
+	str, _ := time.ParseDuration(fmt.Sprintf("%fs", seconds_left))
+	return str.String()
 }
 
 func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
@@ -337,20 +340,28 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 			// speed updates are 1 per second?  need to ask every worker?  (workers update global speed store, sum that)
 			//PrintProgress(file_finished, speed_update, all_done)
 		} else if command == "put" {
-			file_list := ParseFileList(args)
+			file_list, total_bytes := ParseFileList(args)
 			chunks, file_finished := CreatePooledChunkChan(file_list, chunk_size)
 			file_finished_print := make(chan string)
 			status_update := make(chan string)
 			all_done := make(chan string)
 			worker_speeds := make(map[int]int)
+			moved_bytes := 0
+			total_update := make(chan int)
 			finished := false
+			start := time.Now()
 			for iter, worker := range workers {
 				worker_speeds[iter] = 0
 				speed_update := make(chan int)
-				go StreamChunksToPut(worker, chunks) //, speed_update
+				go StreamChunksToPut(worker, chunks, speed_update, total_update)
 				go func() {
 					for speed := range speed_update {
 						worker_speeds[iter] = speed
+					}
+				}()
+				go func() {
+					for moved := range total_update {
+						moved_bytes += moved
 					}
 				}()
 			}
@@ -358,15 +369,35 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 				for _, _ = range file_list {
 					file_finished_print <- <-file_finished
 				}
-				all_done <- "blah transferred in blah time"
+				all_done <- fmt.Sprintf(
+					"%d file%s (%s) transferred in %s",
+					len(file_list),
+					(map[bool]string{true: "s", false: ""})[len(file_list) > 1], // deal with it ಠ_ಠ
+					humanize.Bytes(uint64(total_bytes)),
+					time.Since(start).String(),
+				)
 				finished = true
 			}()
 			go func() {
-				if finished {
-					return
+				for {
+					if finished {
+						return
+					}
+					pool_speed := 0
+					for _, speed := range worker_speeds {
+						pool_speed += speed
+					}
+					byte_progress := moved_bytes / total_bytes
+					status_update <- fmt.Sprintf(
+						"transferring %d files (%s) at %s/s %s%% complete %s remaining",
+						len(file_list),
+						humanize.Bytes(uint64(total_bytes)),
+						humanize.Bytes(uint64(pool_speed)),
+						humanize.Ftoa(float64(int(byte_progress*10000))/100),
+						TimeRemaining(pool_speed, total_bytes-moved_bytes),
+					)
+					time.Sleep(1 * time.Second)
 				}
-				status_update <- "pool the map and update"
-				time.Sleep(1 * time.Second)
 			}()
 			PrintProgress(file_finished_print, status_update, all_done)
 		} else if command == "exit" {
