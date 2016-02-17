@@ -11,7 +11,7 @@ type AuthRequest struct {
 	Password string
 }
 
-func NewAuthRequest(data []byte) interface{} {
+func NewAuthRequest(data []byte, _ tlj.TLJContext) interface{} {
 	auth_request := &AuthRequest{}
 	err := json.Unmarshal(data, &auth_request)
 	if err != nil {
@@ -24,7 +24,7 @@ type Message struct {
 	String string
 }
 
-func NewMessage(data []byte) interface{} {
+func NewMessage(data []byte, _ tlj.TLJContext) interface{} {
 	message := &Message{}
 	err := json.Unmarshal(data, &message)
 	if err != nil {
@@ -37,7 +37,7 @@ type WorkerReady struct {
 	Nonce string
 }
 
-func NewWorkerReady(data []byte) interface{} {
+func NewWorkerReady(data []byte, _ tlj.TLJContext) interface{} {
 	worker_ready := &WorkerReady{}
 	err := json.Unmarshal(data, &worker_ready)
 	if err != nil {
@@ -52,7 +52,7 @@ type TransferChunk struct {
 	Data     []byte
 }
 
-func NewTransferChunk(data []byte) interface{} {
+func NewTransferChunk(data []byte, _ tlj.TLJContext) interface{} {
 	chunk := &TransferChunk{}
 	err := json.Unmarshal(data, &chunk)
 	if err != nil {
@@ -66,7 +66,7 @@ type Command struct {
 	Args    []string
 }
 
-func NewCommand(data []byte) interface{} {
+func NewCommand(data []byte, _ tlj.TLJContext) interface{} {
 	command := &Command{}
 	err := json.Unmarshal(data, &command)
 	if err != nil {

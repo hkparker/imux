@@ -133,7 +133,7 @@ func ForkUserProc(nonce, username string) {
 			return
 		}
 		type_store := BuildTypeStore()
-		client := tlj.NewClient(control_socket, &type_store)
+		client := tlj.NewClient(control_socket, type_store, false)
 		user_clients[username] = client
 		client_created <- true
 	}()
@@ -160,7 +160,7 @@ func HookupChunkAction(server tlj.Server, nonce, username string, user_clients m
 	server.Accept(
 		nonce,
 		reflect.TypeOf(TransferChunk{}),
-		func(iface interface{}) {
+		func(iface interface{}, _ tlj.TLJContext) {
 			if chunk, ok := iface.(*TransferChunk); ok {
 				if client, ok := user_clients[username]; ok {
 					client.Message(chunk)
@@ -172,29 +172,29 @@ func HookupChunkAction(server tlj.Server, nonce, username string, user_clients m
 
 func NewTLJServer(listener net.Listener) tlj.Server {
 	type_store := BuildTypeStore()
-	server := tlj.NewServer(listener, TagSocketAll, &type_store)
+	server := tlj.NewServer(listener, TagSocketAll, type_store)
 	server.AcceptRequest(
 		"all",
 		reflect.TypeOf(AuthRequest{}),
-		func(iface interface{}, responder tlj.Responder) {
+		func(iface interface{}, context tlj.TLJContext) {
 			if auth_request, ok := iface.(*AuthRequest); ok {
 				if Login(auth_request.Username, auth_request.Password) {
 					nonce, err := NewNonce()
 					if err == nil {
-						server.Tags[responder.Socket] = append(server.Tags[responder.Socket], "control")
-						server.Sockets["control"] = append(server.Sockets["control"], responder.Socket)
+						server.Tags[context.Socket] = append(server.Tags[context.Socket], "control")
+						server.Sockets["control"] = append(server.Sockets["control"], context.Socket)
 						user_tag := fmt.Sprintf("user:%s", auth_request.Username)
-						server.Tags[responder.Socket] = append(server.Tags[responder.Socket], user_tag)
-						server.Sockets[user_tag] = append(server.Sockets[user_tag], responder.Socket)
+						server.Tags[context.Socket] = append(server.Tags[context.Socket], user_tag)
+						server.Sockets[user_tag] = append(server.Sockets[user_tag], context.Socket)
 						ForkUserProc(nonce, auth_request.Username)
 						good_nonce[nonce] = auth_request.Username
-						responder.Respond(Message{
+						context.Respond(Message{
 							String: nonce,
 						})
 					}
 				} else {
 					time.Sleep(3 * time.Second)
-					responder.Respond(Message{
+					context.Respond(Message{
 						String: "authentication failed",
 					})
 				}
@@ -205,11 +205,11 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 	server.AcceptRequest(
 		"all",
 		reflect.TypeOf(WorkerReady{}),
-		func(iface interface{}, responder tlj.Responder) {
+		func(iface interface{}, context tlj.TLJContext) {
 			if worker_ready, ok := iface.(*WorkerReady); ok {
 				if username, ok := good_nonce[worker_ready.Nonce]; ok {
-					server.Tags[responder.Socket] = append(server.Tags[responder.Socket], worker_ready.Nonce)
-					server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], responder.Socket)
+					server.Tags[context.Socket] = append(server.Tags[context.Socket], worker_ready.Nonce)
+					server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], context.Socket)
 					HookupChunkAction(server, worker_ready.Nonce, username, user_clients)
 					// create the chunk distributor if needed
 					// 	for
@@ -224,9 +224,9 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 	server.AcceptRequest(
 		"control",
 		reflect.TypeOf(Command{}),
-		func(iface interface{}, responder tlj.Responder) {
+		func(iface interface{}, context tlj.TLJContext) {
 			if command, ok := iface.(*Command); ok {
-				username := UsernameFromTags(server.Tags[responder.Socket])
+				username := UsernameFromTags(server.Tags[context.Socket])
 				if client, ok := user_clients[username]; ok {
 					req, err := client.Request(command)
 					if err != nil {
@@ -237,7 +237,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 					}
 					req.OnResponse(reflect.TypeOf(Message{}), func(iface interface{}) {
 						if message, cast := iface.(*Message); cast {
-							responder.Respond(message)
+							context.Respond(message)
 						}
 					})
 					// if command.Command == "get" {

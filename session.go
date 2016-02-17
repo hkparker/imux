@@ -138,11 +138,11 @@ func TagSocketAll(socket net.Conn, server *tlj.Server) {
 
 func NewTLJServer(listener net.Listener) tlj.Server {
 	type_store := BuildTypeStore()
-	server := tlj.NewServer(listener, TagSocketAll, &type_store)
+	server := tlj.NewServer(listener, TagSocketAll, type_store)
 	server.AcceptRequest(
 		"all",
 		reflect.TypeOf(Command{}),
-		func(iface interface{}, responder tlj.Responder) {
+		func(iface interface{}, context tlj.TLJContext) {
 			if command, ok := iface.(*Command); ok {
 				if command.Command == "exit" {
 					os.Exit(0)
@@ -154,11 +154,11 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 				} else if command.Command == "put" {
 				} else {
 					if function, present := commands[command.Command]; present {
-						responder.Respond(Message{
+						context.Respond(Message{
 							String: function(command.Args),
 						})
 					} else {
-						responder.Respond(Message{
+						context.Respond(Message{
 							String: "command not supported, try \"help\"",
 						})
 					}
@@ -170,7 +170,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 	server.Accept(
 		"all",
 		reflect.TypeOf(TransferChunk{}),
-		func(iface interface{}) {
+		func(iface interface{}, _ tlj.TLJContext) {
 			if _, ok := iface.(*TransferChunk); ok {
 				// if buffers[chunk.destination_path] == nil {
 				// 	assign it to a new buffer

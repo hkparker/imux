@@ -214,7 +214,7 @@ func CreateClient(hostname string, port int) (tlj.Client, error) {
 	}
 
 	type_store := BuildTypeStore()
-	client := tlj.NewClient(conn, &type_store)
+	client := tlj.NewClient(conn, type_store, false)
 	return client, nil
 }
 
@@ -256,7 +256,7 @@ func BuildWorkers(
 					return
 				}
 				type_store := BuildTypeStore()
-				client := tlj.NewClient(conn, &type_store)
+				client := tlj.NewClient(conn, type_store, false)
 				req, err := client.Request(WorkerReady{
 					Nonce: nonce,
 				})
