@@ -152,23 +152,23 @@ func TagSocketAll(socket net.Conn, server *tlj.Server) {
 	server.Sockets["all"] = append(server.Sockets["all"], socket)
 }
 
-func HookupChunkAction(server tlj.Server, nonce, username string, user_clients map[string]tlj.Client) {
-	if ok, _ := hooked_up[nonce]; ok {
-		return
-	}
-	hooked_up[nonce] = true
-	server.Accept(
-		nonce,
-		reflect.TypeOf(TransferChunk{}),
-		func(iface interface{}, _ tlj.TLJContext) {
-			if chunk, ok := iface.(*TransferChunk); ok {
-				if client, ok := user_clients[username]; ok {
-					client.Message(chunk)
-				}
-			}
-		},
-	)
-}
+//func HookupChunkAction(server tlj.Server, nonce, username string, user_clients map[string]tlj.Client) {
+//	if ok, _ := hooked_up[nonce]; ok {
+//		return
+//	}
+//	hooked_up[nonce] = true
+//	server.Accept(
+//		nonce,
+//		reflect.TypeOf(TransferChunk{}),
+//		func(iface interface{}, _ tlj.TLJContext) {
+//			if chunk, ok := iface.(*TransferChunk); ok {
+//				if client, ok := user_clients[username]; ok {
+//					client.Message(chunk)
+//				}
+//			}
+//		},
+//	)
+//}
 
 func NewTLJServer(listener net.Listener) tlj.Server {
 	type_store := BuildTypeStore()
@@ -195,7 +195,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 				} else {
 					time.Sleep(3 * time.Second)
 					context.Respond(Message{
-						String: "authentication failed",
+						String: "failed",
 					})
 				}
 			}
@@ -207,10 +207,10 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 		reflect.TypeOf(WorkerReady{}),
 		func(iface interface{}, context tlj.TLJContext) {
 			if worker_ready, ok := iface.(*WorkerReady); ok {
-				if username, ok := good_nonce[worker_ready.Nonce]; ok {
+				if _, ok := good_nonce[worker_ready.Nonce]; ok {
 					server.Tags[context.Socket] = append(server.Tags[context.Socket], worker_ready.Nonce)
 					server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], context.Socket)
-					HookupChunkAction(server, worker_ready.Nonce, username, user_clients)
+					//HookupChunkAction(server, worker_ready.Nonce, username, user_clients)
 					// create the chunk distributor if needed
 					// 	for
 					// 		read from the chunk channel

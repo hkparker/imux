@@ -218,13 +218,7 @@ func CreateClient(hostname string, port int) (tlj.Client, error) {
 	return client, nil
 }
 
-func BuildWorkers(
-	hostname string,
-	port int,
-	networks map[string]int,
-	nonce string,
-	resume bool,
-) ([]tlj.Client, error) {
+func BuildWorkers(hostname string, port int, networks map[string]int, nonce string, resume bool) ([]tlj.Client, error) {
 	print_progress := make(chan string)
 	print_status := make(chan string)
 	print_finished := make(chan string)
@@ -314,7 +308,6 @@ func BuildWorkers(
 
 func TimeRemaining(speed, remaining int) string {
 	seconds_left := float64(remaining) / float64(speed)
-	fmt.Println(fmt.Sprintf("%fs", seconds_left))
 	str, _ := time.ParseDuration(fmt.Sprintf("%fs", seconds_left))
 	return str.String()
 }
@@ -354,11 +347,11 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 				worker_speeds[iter] = 0
 				speed_update := make(chan int)
 				go StreamChunksToPut(worker, chunks, speed_update, total_update)
-				go func() {
+				go func(liter int) {
 					for speed := range speed_update {
-						worker_speeds[iter] = speed
+						worker_speeds[liter] = speed
 					}
-				}()
+				}(iter)
 				go func() {
 					for moved := range total_update {
 						moved_bytes += moved

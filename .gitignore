@@ -1,3 +1,6 @@
 .*.sw?
 *.pem
 *.key
+imux
+imux-session
+imux-server
