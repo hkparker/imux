@@ -33,17 +33,17 @@ func NewMessage(data []byte, _ tlj.TLJContext) interface{} {
 	return message
 }
 
-type WorkerReady struct {
+type WorkerAuth struct {
 	Nonce string
 }
 
-func NewWorkerReady(data []byte, _ tlj.TLJContext) interface{} {
-	worker_ready := &WorkerReady{}
-	err := json.Unmarshal(data, &worker_ready)
+func NewWorkerAuth(data []byte, _ tlj.TLJContext) interface{} {
+	worker_ready := &WorkerAuth{}
+	err := json.Unmarshal(data, &worker_auth)
 	if err != nil {
 		return nil
 	}
-	return worker_ready
+	return worker_auth
 }
 
 type TransferChunk struct {

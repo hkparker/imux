@@ -16,10 +16,18 @@ import (
 	"os/user"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 )
 
-func PrintProgress(completed_files, statuses, finished chan string) {
+var username string
+var hostname string
+var port int
+var network_config string
+var resume bool
+var chunk_size int
+
+func printProgress(completed_files, statuses, finished chan string) {
 	last_status := ""
 	last_len := 0
 	for {
@@ -55,7 +63,7 @@ func PrintProgress(completed_files, statuses, finished chan string) {
 	}
 }
 
-func LoadKnownHosts() map[string]string {
+func loadKnownHosts() map[string]string {
 	sigs := make(map[string]string)
 	filename := os.Getenv("HOME") + "/.multiplexity/known_hosts"
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
@@ -75,7 +83,7 @@ func LoadKnownHosts() map[string]string {
 	return sigs
 }
 
-func AppendHost(hostname string, signature string) {
+func appendHost(hostname string, signature string) {
 	filename := os.Getenv("HOME") + "/.multiplexity/known_hosts"
 	known_hosts, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
@@ -85,29 +93,29 @@ func AppendHost(hostname string, signature string) {
 	known_hosts.Close()
 }
 
-func SHA256Sig(conn *tls.Conn) string {
+func sha256Sig(conn *tls.Conn) string {
 	sig := conn.ConnectionState().PeerCertificates[0].Signature
 	sha := sha256.Sum256(sig)
 	str := hex.EncodeToString(sha[:])
 	return str
 }
 
-func ParseNetworks(data string) map[string]int {
+func parseNetworks(data string) (map[string]int, error) {
 	networks := make(map[string]int)
 	networks["0.0.0.0"] = 2
-	return networks
+	return networks, nil
 }
 
-func ReadPassword() string {
+func readPassword() string {
 	fmt.Print("Password: ")
 	password_bytes, _ := terminal.ReadPassword(0)
 	fmt.Println()
 	return strings.TrimSpace(string(password_bytes))
 }
 
-func Login(username string, client tlj.Client) string {
+func clientLogin(username string, client tlj.Client) string {
 	for {
-		password := ReadPassword()
+		password := readPassword()
 		auth_request := AuthRequest{
 			Username: username,
 			Password: password,
@@ -126,7 +134,7 @@ func Login(username string, client tlj.Client) string {
 	}
 }
 
-func TrustDialog(hostname, signature string) (bool, bool) {
+func trustDialog(hostname, signature string) (bool, bool) {
 	fmt.Println(fmt.Sprintf(
 		"%s presents certificate with signature:\n%s",
 		hostname,
@@ -154,7 +162,7 @@ func TrustDialog(hostname, signature string) (bool, bool) {
 	return connect, save
 }
 
-func MitMWarning(new_signature, old_signature string) (bool, bool) {
+func mitmWarning(new_signature, old_signature string) (bool, bool) {
 	fmt.Println(
 		"WARNING: Remote certificate has changed!!\nold: %s\nnew: %s",
 		old_signature,
@@ -182,8 +190,8 @@ func MitMWarning(new_signature, old_signature string) (bool, bool) {
 	return connect, update
 }
 
-func CreateClient(hostname string, port int) (tlj.Client, error) {
-	known_hosts := LoadKnownHosts()
+func createClient(hostname string, port int) (tlj.Client, error) {
+	known_hosts := loadKnownHosts()
 	conn, err := tls.Dial(
 		"tcp",
 		fmt.Sprintf("%s:%d", hostname, port),
@@ -192,24 +200,24 @@ func CreateClient(hostname string, port int) (tlj.Client, error) {
 	if err != nil {
 		return tlj.Client{}, err
 	}
-	signature := SHA256Sig(conn)
+	signature := sha256Sig(conn)
 	if saved_signature, present := known_hosts[conn.RemoteAddr().String()]; present {
 		if signature != saved_signature {
-			connect, update := MitMWarning(signature, saved_signature)
+			connect, update := mitmWarning(signature, saved_signature)
 			if !connect {
 				return tlj.Client{}, errors.New("TLS certificate mismatch")
 			}
 			if update {
-				AppendHost(conn.RemoteAddr().String(), signature)
+				appendHost(conn.RemoteAddr().String(), signature)
 			}
 		}
 	} else {
-		connect, save_cert := TrustDialog(hostname, signature)
+		connect, save_cert := trustDialog(hostname, signature)
 		if !connect {
 			return tlj.Client{}, errors.New("TLS certificate rejected")
 		}
 		if save_cert {
-			AppendHost(conn.RemoteAddr().String(), signature)
+			appendHost(conn.RemoteAddr().String(), signature)
 		}
 	}
 
@@ -218,101 +226,172 @@ func CreateClient(hostname string, port int) (tlj.Client, error) {
 	return client, nil
 }
 
-func BuildWorkers(hostname string, port int, networks map[string]int, nonce string, resume bool) ([]tlj.Client, error) {
-	print_progress := make(chan string)
-	print_status := make(chan string)
-	print_finished := make(chan string)
-	go PrintProgress(print_progress, print_status, print_finished)
-	built := make(chan bool)
-	created := make(chan tlj.Client)
-	workers := make([]tlj.Client, 0)
-	total_built := 0
-	total_failed := 0
-	total_sockets := 0
+func connectWorkers(hostname string, port int, worker_server tlj.Server, networks map[string]int, nonce string, resume bool) (streamers []tlj.StreamWriter, err error) {
+	worker_status_update_text := make(chan string)
+	worker_build_finished_text := make(chan string)
+	go printProgress(
+		make(chan string),
+		worker_status_update_text,
+		worker_build_finished_text,
+	)
+
+	streamer_chan := make(chan tlj.StreamWriter)
+	success_worker_count := 0
+	failed_worker_count := 0
+	total_worker_count := 0
+	var worker_waiter sync.WaitGroup
 	for _, count := range networks {
-		total_sockets += count
+		worker_waiter.Add(count)
+		total_worker_count += count
 	}
+
+	failed_worker_reporter := make(chan bool, total_worker_count)
 	start := time.Now()
-	for _, count := range networks {
+	for bind, count := range networks {
 		for i := 0; i < count; i++ {
 			go func() {
+				defer worker_waiter.Done()
+				dialer := bind
 				conn, err := tls.Dial(
 					"tcp",
 					fmt.Sprintf("%s:%d", hostname, port),
 					&tls.Config{
 						InsecureSkipVerify: true,
 					},
-					// need to specify local bind
-					// need to check sig or let it slide based on previous user selection
+					// need to check sig too
 				)
 				if err != nil {
-					built <- false
+					failed_worker_reporter <- true
 					return
 				}
+
 				type_store := BuildTypeStore()
-				client := tlj.NewClient(conn, type_store, false)
-				req, err := client.Request(WorkerReady{
+				client := tlj.NewClient(conn, type_store, true)
+				err = client.Message(WorkerAuth{
 					Nonce: nonce,
 				})
 				if err != nil {
-					built <- false
+					failed_worker_reporter <- true
 					return
 				}
-				req.OnResponse(reflect.TypeOf(TransferChunk{}), func(iface interface{}) {
-					if _, ok := iface.(*TransferChunk); ok {
-						// find or build the currect buffer for this chunk
-						// send this chunk to the buffer
-						//if buffers[chunk.Data] == nil {
-						// create a new buffer and everything
-						//}
-						//fmt.Println(chunk)
-						// map of buffers created in main and passed in here, modified later in real time
-						// need to unpack the base64 data and buld the inner chunk
-					}
-				})
-				built <- true
-				created <- client
+
+				writer, _ := tlj.NewStreamWriter(
+					conn,
+					type_store,
+					reflect.TypeOf(TransferChunk{}),
+				)
+				streamer_chan <- writer
 			}()
 		}
 	}
-	for _, count := range networks {
-		for i := 0; i < count; i++ {
-			success := <-built
-			if success {
-				total_built += 1
-				workers = append(workers, <-created)
-			} else {
-				total_failed += 1
+
+	halt_prints := make(chan bool, 1)
+	go func() {
+		for {
+			select {
+			case stream_writer := <-streamer_chan:
+				success_worker_count += 1
+				streamers = append(streamers, stream_writer)
+				worker_server.Insert(stream_writer.Socket)
+			case <-failed_worker_reporter:
+				failed_worker_count += 1
+			case <-halt_prints:
+				return
 			}
-			print_status <- fmt.Sprintf(
+			worker_status_update_text <- fmt.Sprintf(
 				"built %d/%d transfer sockets, %d failed",
-				total_built,
-				total_sockets,
-				total_failed,
+				success_worker_count,
+				total_worker_count,
+				failed_worker_count,
 			)
 		}
-	}
-	elapsed := time.Since(start).String()
-	print_finished <- fmt.Sprintf(
+	}()
+	worker_waiter.Wait()
+	halt_prints <- true
+
+	worker_build_finished_text <- fmt.Sprintf(
 		"%d/%d transfer sockets built, %d failed in %s",
-		total_built,
-		total_sockets,
-		total_failed,
-		elapsed,
+		success_worker_count,
+		total_worker_count,
+		failed_worker_count,
+		time.Since(start).String(),
 	)
-	if total_failed == total_sockets {
-		return workers, errors.New("all transfer sockets failed to build")
+	if total_worker_count == failed_worker_count {
+		err = errors.New("all transfer sockets failed to build")
+		return
 	}
-	return workers, nil
+	return
 }
 
-func TimeRemaining(speed, remaining int) string {
+func timeRemaining(speed, remaining int) string {
 	seconds_left := float64(remaining) / float64(speed)
 	str, _ := time.ParseDuration(fmt.Sprintf("%fs", seconds_left))
 	return str.String()
 }
 
-func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
+func uploadFiles(file_list []string, total_bytes int, streamers []tlj.StreamWriter) {
+	chunks, file_finished := CreatePooledChunkChan(file_list, chunk_size)
+	file_finished_print := make(chan string)
+	status_update := make(chan string)
+	all_done := make(chan string)
+	worker_speeds := make(map[int]int)
+	moved_bytes := 0
+	total_update := make(chan int)
+	finished := false
+	start := time.Now()
+	for iter, worker := range streamers {
+		worker_speeds[iter] = 0
+		speed_update := make(chan int)
+		go StreamChunksToPut(worker, chunks, speed_update, total_update)
+		go func(liter int) {
+			for speed := range speed_update {
+				worker_speeds[liter] = speed
+			}
+		}(iter)
+		go func() {
+			for moved := range total_update {
+				moved_bytes += moved
+			}
+		}()
+	}
+	go func() {
+		for _, _ = range file_list {
+			file_finished_print <- <-file_finished
+		}
+		all_done <- fmt.Sprintf(
+			"%d file%s (%s) transferred in %s",
+			len(file_list),
+			(map[bool]string{true: "s", false: ""})[len(file_list) > 1], // deal with it ಠ_ಠ
+			humanize.Bytes(uint64(total_bytes)),
+			time.Since(start).String(),
+		)
+		finished = true
+	}()
+	go func() {
+		for {
+			if finished {
+				return
+			}
+			pool_speed := 0
+			for _, speed := range worker_speeds {
+				pool_speed += speed
+			}
+			byte_progress := moved_bytes / total_bytes
+			status_update <- fmt.Sprintf(
+				"transferring %d files (%s) at %s/s %s%% complete %s remaining",
+				len(file_list),
+				humanize.Bytes(uint64(total_bytes)),
+				humanize.Bytes(uint64(pool_speed)),
+				humanize.Ftoa(float64(int(byte_progress*10000))/100),
+				timeRemaining(pool_speed, total_bytes-moved_bytes),
+			)
+			time.Sleep(1 * time.Second)
+		}
+	}()
+	printProgress(file_finished_print, status_update, all_done)
+}
+
+func commandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 	stdin := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("imux> ")
@@ -334,65 +413,7 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 			//PrintProgress(file_finished, speed_update, all_done)
 		} else if command == "put" {
 			file_list, total_bytes := ParseFileList(args)
-			chunks, file_finished := CreatePooledChunkChan(file_list, chunk_size)
-			file_finished_print := make(chan string)
-			status_update := make(chan string)
-			all_done := make(chan string)
-			worker_speeds := make(map[int]int)
-			moved_bytes := 0
-			total_update := make(chan int)
-			finished := false
-			start := time.Now()
-			for iter, worker := range workers {
-				worker_speeds[iter] = 0
-				speed_update := make(chan int)
-				go StreamChunksToPut(worker, chunks, speed_update, total_update)
-				go func(liter int) {
-					for speed := range speed_update {
-						worker_speeds[liter] = speed
-					}
-				}(iter)
-				go func() {
-					for moved := range total_update {
-						moved_bytes += moved
-					}
-				}()
-			}
-			go func() {
-				for _, _ = range file_list {
-					file_finished_print <- <-file_finished
-				}
-				all_done <- fmt.Sprintf(
-					"%d file%s (%s) transferred in %s",
-					len(file_list),
-					(map[bool]string{true: "s", false: ""})[len(file_list) > 1], // deal with it ಠ_ಠ
-					humanize.Bytes(uint64(total_bytes)),
-					time.Since(start).String(),
-				)
-				finished = true
-			}()
-			go func() {
-				for {
-					if finished {
-						return
-					}
-					pool_speed := 0
-					for _, speed := range worker_speeds {
-						pool_speed += speed
-					}
-					byte_progress := moved_bytes / total_bytes
-					status_update <- fmt.Sprintf(
-						"transferring %d files (%s) at %s/s %s%% complete %s remaining",
-						len(file_list),
-						humanize.Bytes(uint64(total_bytes)),
-						humanize.Bytes(uint64(pool_speed)),
-						humanize.Ftoa(float64(int(byte_progress*10000))/100),
-						TimeRemaining(pool_speed, total_bytes-moved_bytes),
-					)
-					time.Sleep(1 * time.Second)
-				}
-			}()
-			PrintProgress(file_finished_print, status_update, all_done)
+			uploadFiles(file_list, total_bytes, []tlj.StreamWriter{})
 		} else if command == "exit" {
 			control.Request(Command{
 				Command: "exit",
@@ -423,26 +444,52 @@ func CommandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 
 func main() {
 	u, _ := user.Current()
-	var username = flag.String("user", u.Username, "username")
-	var hostname = flag.String("host", "", "hostname")
-	var port = flag.Int("port", 443, "port")
-	var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
-	var resume = flag.Bool("resume", true, "resume transfers if a part of the file already exists on the destination")
-	var chunk_size = flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
+	username = *flag.String("user", u.Username, "username")
+	hostname = *flag.String("host", "", "hostname")
+	port = *flag.Int("port", 443, "port")
+	network_config = *flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
+	resume = *flag.Bool("resume", true, "resume transfers if a part of the file already exists on the destination")
+	chunk_size = *flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 	flag.Parse()
-	networks := ParseNetworks(*network_config)
-	client, err := CreateClient(*hostname, *port)
+
+	networks, err := parseNetworks(network_config)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
 	}
-	nonce := Login(*username, client)
-	workers, err := BuildWorkers(*hostname, *port, networks, nonce, *resume)
+	client, err := createClient(hostname, port)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
 	}
-	go CommandLoop(client, workers, *chunk_size)
+	nonce := clientLogin(username, client)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	worker_server := tlj.Server{
+		TypeStore:       type_store,
+		Tag:             tag,
+		Tags:            make(map[net.Conn][]string),
+		Sockets:         make(map[string][]net.Conn),
+		Events:          make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
+		Requests:        make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
+		FailedServer:    make(chan error, 1),
+		FailedSockets:   make(chan net.Conn, 200),
+		TagManipulation: &sync.Mutex{},
+		InsertRequests:  &sync.Mutex{},
+		InsertEvents:    &sync.Mutex{},
+	}
+	go worker_server.process()
+	worker_server.Accept("peer", reflect.TypeOf(TransferChunk{}), func(_ tlj.TLJContext, iface interface{}) {
+		if chunk, ok := iface.(*Chunk); ok {
+			sentToChunkWriter(chunk)
+		}
+	})
+	streamers, err := ConnectWorkers(hostname, port, worker_server, networks, nonce, resume)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	go CommandLoop(client, streamers, chunk_size)
 	err = <-client.Dead
 	fmt.Println("control connection closed:", err)
 }
