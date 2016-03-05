@@ -6,6 +6,8 @@ import (
 	"reflect"
 )
 
+var type_store = tlj.TypeStore{}
+
 type AuthRequest struct {
 	Username string
 	Password string
@@ -38,7 +40,7 @@ type WorkerAuth struct {
 }
 
 func NewWorkerAuth(data []byte, _ tlj.TLJContext) interface{} {
-	worker_ready := &WorkerAuth{}
+	worker_auth := &WorkerAuth{}
 	err := json.Unmarshal(data, &worker_auth)
 	if err != nil {
 		return nil
@@ -89,9 +91,9 @@ func BuildTypeStore() tlj.TypeStore {
 		NewAuthRequest,
 	)
 	type_store.AddType(
-		reflect.TypeOf(WorkerReady{}),
-		reflect.TypeOf(&WorkerReady{}),
-		NewWorkerReady,
+		reflect.TypeOf(WorkerAuth{}),
+		reflect.TypeOf(&WorkerAuth{}),
+		NewWorkerAuth,
 	)
 	type_store.AddType(
 		reflect.TypeOf(TransferChunk{}),

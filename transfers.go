@@ -1,7 +1,19 @@
 package imux
 
-func MoveFiles(file_list [][2]string, total_bytes int, streamers []tlj.StreamWriter) {
-	chunks, file_finished := CreatePooledChunkChan(file_list, chunk_size)
+import (
+	"crypto/tls"
+	"errors"
+	"fmt"
+	"github.com/dustin/go-humanize"
+	"github.com/hkparker/TLJ"
+	"net"
+	"reflect"
+	"sync"
+	"time"
+)
+
+func MoveFiles(file_list []string, total_bytes int, streamers []tlj.StreamWriter) {
+	_, file_finished := CreatePooledChunkChan(file_list, 5*1024*1024)
 	file_finished_print := make(chan string)
 	status_update := make(chan string)
 	all_done := make(chan string)
@@ -10,10 +22,10 @@ func MoveFiles(file_list [][2]string, total_bytes int, streamers []tlj.StreamWri
 	total_update := make(chan int)
 	finished := false
 	start := time.Now()
-	for iter, worker := range streamers {
+	for iter, _ := range streamers {
 		worker_speeds[iter] = 0
 		speed_update := make(chan int)
-		go StreamChunksToPut(worker, chunks, speed_update, total_update)
+		//go StreamChunksToPut(worker, chunks, speed_update, total_update)
 		go func(liter int) {
 			for speed := range speed_update {
 				worker_speeds[liter] = speed
@@ -59,7 +71,7 @@ func MoveFiles(file_list [][2]string, total_bytes int, streamers []tlj.StreamWri
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	imux.printProgress(file_finished_print, status_update, all_done)
+	PrintProgress(file_finished_print, status_update, all_done)
 }
 
 func timeRemaining(speed, remaining int) string {
@@ -69,21 +81,21 @@ func timeRemaining(speed, remaining int) string {
 }
 
 func ConnectWorkers(hostname string, port int, networks map[string]int, nonce string) (streamers []tlj.StreamWriter, err error) {
-	discard_listener, _ := net.Listen("127.0.0.1:0")
+	discard_listener, _ := net.Listen("tcp", "127.0.0.1:0")
 	worker_server := tlj.NewServer(
 		discard_listener,
-		imux.TagSocketsAll,
+		TagSocketAll,
 		type_store,
 	)
-	worker_server.Accept("peer", reflect.TypeOf(TransferChunk{}), func(_ tlj.TLJContext, iface interface{}) {
-		if chunk, ok := iface.(*TransferChunk); ok {
-			sentToChunkWriter(chunk)
+	worker_server.Accept("peer", reflect.TypeOf(TransferChunk{}), func(iface interface{}, _ tlj.TLJContext) {
+		if _, ok := iface.(*TransferChunk); ok {
+			//SentToChunkWriter(chunk)
 		}
 	})
 
 	worker_status_update_text := make(chan string)
 	worker_build_finished_text := make(chan string)
-	go imux.PrintProgress(
+	go PrintProgress(
 		make(chan string),
 		worker_status_update_text,
 		worker_build_finished_text,
@@ -101,11 +113,11 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 
 	failed_worker_reporter := make(chan bool, total_worker_count)
 	start := time.Now()
-	for bind, count := range networks {
+	for _, count := range networks {
 		for i := 0; i < count; i++ {
 			go func() {
 				defer worker_waiter.Done()
-				dialer := bind
+				//dialer := bind
 				conn, err := tls.Dial(
 					"tcp",
 					fmt.Sprintf("%s:%d", hostname, port),
@@ -178,7 +190,7 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 }
 
 func CreateClient(hostname string, port int) (tlj.Client, error) {
-	known_hosts := imux.LoadKnownHosts()
+	known_hosts := LoadKnownHosts()
 	conn, err := tls.Dial(
 		"tcp",
 		fmt.Sprintf("%s:%d", hostname, port),
@@ -187,24 +199,24 @@ func CreateClient(hostname string, port int) (tlj.Client, error) {
 	if err != nil {
 		return tlj.Client{}, err
 	}
-	signature := imux.SHA256Sig(conn)
+	signature := SHA256Sig(conn)
 	if saved_signature, present := known_hosts[conn.RemoteAddr().String()]; present {
 		if signature != saved_signature {
-			connect, update := imux.MitMWarning(signature, saved_signature)
+			connect, update := MitMWarning(signature, saved_signature)
 			if !connect {
 				return tlj.Client{}, errors.New("TLS certificate mismatch")
 			}
 			if update {
-				imux.AppendKnownHost(conn.RemoteAddr().String(), signature)
+				AppendKnownHost(conn.RemoteAddr().String(), signature)
 			}
 		}
 	} else {
-		connect, save_cert := trustDialog(hostname, signature)
+		connect, save_cert := TrustDialog(hostname, signature)
 		if !connect {
 			return tlj.Client{}, errors.New("TLS certificate rejected")
 		}
 		if save_cert {
-			appendHost(conn.RemoteAddr().String(), signature)
+			AppendKnownHost(conn.RemoteAddr().String(), signature)
 		}
 	}
 

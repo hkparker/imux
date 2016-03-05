@@ -1,7 +1,17 @@
 package imux
 
 import (
+	"bufio"
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/hex"
+	"fmt"
+	"github.com/hkparker/TLJ"
+	"golang.org/x/crypto/ssh/terminal"
+	"log"
 	"os"
+	"reflect"
+	"strings"
 )
 
 func LoadKnownHosts() map[string]string {
@@ -50,7 +60,7 @@ func ReadPassword() string {
 
 func ClientLogin(username string, client tlj.Client) string {
 	for {
-		password := readPassword()
+		password := ReadPassword()
 		auth_request := AuthRequest{
 			Username: username,
 			Password: password,

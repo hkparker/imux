@@ -1,8 +1,8 @@
 session:
-	go build imux-session/main.go
+	go build -o imux-session imux-session.d/main.go
 
 server: session
-	go build imux-server/main.go
+	go build -o imux-server/main.go
 
 client:
 	go build imux/main.go

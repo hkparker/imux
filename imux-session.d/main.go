@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/dustin/go-humanize"
 	"github.com/hkparker/TLJ"
+	"github.com/hkparker/imux"
 	"io/ioutil"
 	"net"
 	"os"
@@ -137,13 +138,13 @@ func TagSocketAll(socket net.Conn, server *tlj.Server) {
 }
 
 func NewTLJServer(listener net.Listener) tlj.Server {
-	type_store := BuildTypeStore()
+	type_store := imux.BuildTypeStore()
 	server := tlj.NewServer(listener, TagSocketAll, type_store)
 	server.AcceptRequest(
 		"all",
-		reflect.TypeOf(Command{}),
+		reflect.TypeOf(imux.Command{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if command, ok := iface.(*Command); ok {
+			if command, ok := iface.(*imux.Command); ok {
 				if command.Command == "exit" {
 					os.Exit(0)
 				} else if command.Command == "get" {
@@ -154,11 +155,11 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 				} else if command.Command == "put" {
 				} else {
 					if function, present := commands[command.Command]; present {
-						context.Respond(Message{
+						context.Respond(imux.Message{
 							String: function(command.Args),
 						})
 					} else {
-						context.Respond(Message{
+						context.Respond(imux.Message{
 							String: "command not supported, try \"help\"",
 						})
 					}
@@ -169,9 +170,9 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 
 	server.Accept(
 		"all",
-		reflect.TypeOf(TransferChunk{}),
+		reflect.TypeOf(imux.TransferChunk{}),
 		func(iface interface{}, _ tlj.TLJContext) {
-			if _, ok := iface.(*TransferChunk); ok {
+			if _, ok := iface.(*imux.TransferChunk); ok {
 				// if buffers[chunk.destination_path] == nil {
 				// 	assign it to a new buffer
 				//}
