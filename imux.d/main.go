@@ -2,24 +2,16 @@ package main
 
 import (
 	"bufio"
-	"crypto/sha256"
-	"crypto/tls"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/dustin/go-humanize"
 	"github.com/hkparker/TLJ"
 	"github.com/hkparker/imux"
-	"golang.org/x/crypto/ssh/terminal"
 	"log"
-	"net"
 	"os"
 	"os/user"
 	"reflect"
 	"strings"
-	"sync"
-	"time"
 )
 
 var username string
@@ -31,7 +23,7 @@ var chunk_size int
 
 var type_store tlj.TypeStore
 
-func commandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
+func commandLoop(control tlj.Client, workers []tlj.StreamWriter, chunk_size int) {
 	stdin := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("imux> ")
@@ -56,13 +48,13 @@ func commandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 			//file_list, total_bytes := ParseFileList(args)
 			//uploadFiles(file_list, total_bytes, []tlj.StreamWriter{})
 		} else if command == "exit" {
-			control.Request(Command{
+			control.Request(imux.Command{
 				Command: "exit",
 			})
 			control.Dead <- errors.New("user exit")
 			break
 		} else {
-			req, err := control.Request(Command{
+			req, err := control.Request(imux.Command{
 				Command: command,
 				Args:    args,
 			})
@@ -73,8 +65,8 @@ func commandLoop(control tlj.Client, workers []tlj.Client, chunk_size int) {
 				break
 			}
 			command_output := make(chan string)
-			req.OnResponse(reflect.TypeOf(Message{}), func(iface interface{}) {
-				if message, ok := iface.(*Message); ok {
+			req.OnResponse(reflect.TypeOf(imux.Message{}), func(iface interface{}) {
+				if message, ok := iface.(*imux.Message); ok {
 					command_output <- message.String
 				}
 			})

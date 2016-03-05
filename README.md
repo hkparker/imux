@@ -22,9 +22,27 @@ Usage
 -----
 
 ```
-imux -help
+Usage of ./imux:
+  -chunksize int
+    	size of each file chink in byte (default 5242880)
+  -host string
+    	hostname
+  -networks string
+    	socket configuration string: <bind ip>:<count>; (default "0.0.0.0:200")
+  -port int
+    	port (default 443)
+  -user string
+    	username (default "demo")
 
-imux-server -help
+Usage of ./imux-server:
+  -cert string
+    	pem file with certificate to present (default "ca.pem")
+  -key string
+    	pem file with key for certificate (default "ca.key")
+  -listen string
+    	address to listen on (default "0.0.0.0")
+  -port int
+    	port to listen on (default 443)
 ```
 
 License

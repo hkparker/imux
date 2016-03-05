@@ -1,13 +1,13 @@
+all: server client
+
 session:
 	go build -o imux-session imux-session.d/main.go
 
 server: session
-	go build -o imux-server/main.go
+	go build -o imux-server imux-server.d/main.go
 
 client:
-	go build imux/main.go
-
-all: server client
+	go build -o imux imux.d/main.go
 
 deps:
 	go get github.com/hkparker/TLJ

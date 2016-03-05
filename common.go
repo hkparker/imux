@@ -20,7 +20,7 @@ func ParseFileList(items []string) ([]string, int) {
 	// if the item is a readable file, add it to the list
 	//}
 	//walk
-	return all_files, 100 // also return the sinze in bytes of all files
+	return all_files, 100 // also return the size in bytes of all files
 }
 
 func CreatePooledChunkChan(files []string, chunk_size int) (chan TransferChunk, chan string) {

@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/hkparker/TLJ"
+	"github.com/hkparker/imux"
 	"github.com/kless/osutil/user/crypt/sha512_crypt"
 	"io/ioutil"
 	"log"
@@ -132,7 +133,7 @@ func ForkUserProc(nonce, username string) {
 			fmt.Println(err)
 			return
 		}
-		type_store := BuildTypeStore()
+		type_store := imux.BuildTypeStore()
 		client := tlj.NewClient(control_socket, type_store, false)
 		user_clients[username] = client
 		client_created <- true
@@ -171,13 +172,13 @@ func TagSocketAll(socket net.Conn, server *tlj.Server) {
 //}
 
 func NewTLJServer(listener net.Listener) tlj.Server {
-	type_store := BuildTypeStore()
+	type_store := imux.BuildTypeStore()
 	server := tlj.NewServer(listener, TagSocketAll, type_store)
 	server.AcceptRequest(
 		"all",
-		reflect.TypeOf(AuthRequest{}),
+		reflect.TypeOf(imux.AuthRequest{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if auth_request, ok := iface.(*AuthRequest); ok {
+			if auth_request, ok := iface.(*imux.AuthRequest); ok {
 				if Login(auth_request.Username, auth_request.Password) {
 					nonce, err := NewNonce()
 					if err == nil {
@@ -188,13 +189,13 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 						server.Sockets[user_tag] = append(server.Sockets[user_tag], context.Socket)
 						ForkUserProc(nonce, auth_request.Username)
 						good_nonce[nonce] = auth_request.Username
-						context.Respond(Message{
+						context.Respond(imux.Message{
 							String: nonce,
 						})
 					}
 				} else {
 					time.Sleep(3 * time.Second)
-					context.Respond(Message{
+					context.Respond(imux.Message{
 						String: "failed",
 					})
 				}
@@ -204,9 +205,9 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 
 	server.AcceptRequest(
 		"all",
-		reflect.TypeOf(WorkerReady{}),
+		reflect.TypeOf(imux.WorkerAuth{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if worker_ready, ok := iface.(*WorkerReady); ok {
+			if worker_ready, ok := iface.(*imux.WorkerAuth); ok {
 				if _, ok := good_nonce[worker_ready.Nonce]; ok {
 					server.Tags[context.Socket] = append(server.Tags[context.Socket], worker_ready.Nonce)
 					server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], context.Socket)
@@ -223,9 +224,9 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 
 	server.AcceptRequest(
 		"control",
-		reflect.TypeOf(Command{}),
+		reflect.TypeOf(imux.Command{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if command, ok := iface.(*Command); ok {
+			if command, ok := iface.(*imux.Command); ok {
 				username := UsernameFromTags(server.Tags[context.Socket])
 				if client, ok := user_clients[username]; ok {
 					req, err := client.Request(command)
@@ -235,8 +236,8 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 					if command.Command == "exit" {
 						delete(user_clients, username)
 					}
-					req.OnResponse(reflect.TypeOf(Message{}), func(iface interface{}) {
-						if message, cast := iface.(*Message); cast {
+					req.OnResponse(reflect.TypeOf(imux.Message{}), func(iface interface{}) {
+						if message, cast := iface.(*imux.Message); cast {
 							context.Respond(message)
 						}
 					})
