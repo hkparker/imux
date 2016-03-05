@@ -97,7 +97,7 @@ func TrustDialog(hostname, signature string) (bool, bool) {
 	return connect, save
 }
 
-func MitmWarning(new_signature, old_signature string) (bool, bool) {
+func MitMWarning(new_signature, old_signature string) (bool, bool) {
 	fmt.Println(
 		"WARNING: Remote certificate has changed!!\nold: %s\nnew: %s",
 		old_signature,

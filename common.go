@@ -58,3 +58,45 @@ func StreamChunksToPut(worker tlj.Client, chunks chan TransferChunk, speed_updat
 		// take note of elapsed time and chunk size, update my speed, update amount moved
 	}
 }
+
+func PrintProgress(completed_files, statuses, finished chan string) {
+	last_status := ""
+	last_len := 0
+	for {
+		select {
+		case completed_file := <-completed_files:
+			fmt.Printf("\r")
+			line := "completed: " + completed_file
+			fmt.Print(line)
+			print_len := len(line)
+			trail_len := last_len - print_len
+			if trail_len > 0 {
+				for i := 0; i < trail_len; i++ {
+					fmt.Print(" ")
+				}
+			}
+			fmt.Print("\n" + last_status)
+		case status := <-statuses:
+			last_status = status
+			fmt.Printf("\r")
+			fmt.Print(status)
+			print_len := len(status)
+			trail_len := last_len - print_len
+			if trail_len > 0 {
+				for i := 0; i < trail_len; i++ {
+					fmt.Print(" ")
+				}
+			}
+			last_len = print_len
+		case elapsed := <-finished:
+			fmt.Println("\n" + elapsed)
+			return
+		}
+	}
+}
+
+func ParseNetworks(data string) (map[string]int, error) {
+	networks := make(map[string]int)
+	networks["0.0.0.0"] = 2
+	return networks, nil
+}

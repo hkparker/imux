@@ -1,6 +1,11 @@
-server:
+session:
+	go build imux-session/main.go
+
+server: session
+	go build imux-server/main.go
 
 client:
+	go build imux/main.go
 
 all: server client
 
