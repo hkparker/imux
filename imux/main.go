@@ -12,6 +12,7 @@ import (
 	"github.com/hkparker/TLJ"
 	"golang.org/x/crypto/ssh/terminal"
 	"log"
+	"net"
 	"os"
 	"os/user"
 	"reflect"
@@ -26,6 +27,8 @@ var port int
 var network_config string
 var resume bool
 var chunk_size int
+
+var type_store tlj.TypeStore
 
 func printProgress(completed_files, statuses, finished chan string) {
 	last_status := ""
@@ -63,131 +66,10 @@ func printProgress(completed_files, statuses, finished chan string) {
 	}
 }
 
-func loadKnownHosts() map[string]string {
-	sigs := make(map[string]string)
-	filename := os.Getenv("HOME") + "/.multiplexity/known_hosts"
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		os.Create(filename)
-		return sigs
-	}
-	known_hosts, err := os.Open(filename)
-	defer known_hosts.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-	scanner := bufio.NewScanner(known_hosts)
-	for scanner.Scan() {
-		contents := strings.Split(scanner.Text(), " ")
-		sigs[contents[0]] = contents[1]
-	}
-	return sigs
-}
-
-func appendHost(hostname string, signature string) {
-	filename := os.Getenv("HOME") + "/.multiplexity/known_hosts"
-	known_hosts, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		log.Fatal(err)
-	}
-	known_hosts.WriteString(hostname + " " + signature + "\n")
-	known_hosts.Close()
-}
-
-func sha256Sig(conn *tls.Conn) string {
-	sig := conn.ConnectionState().PeerCertificates[0].Signature
-	sha := sha256.Sum256(sig)
-	str := hex.EncodeToString(sha[:])
-	return str
-}
-
 func parseNetworks(data string) (map[string]int, error) {
 	networks := make(map[string]int)
 	networks["0.0.0.0"] = 2
 	return networks, nil
-}
-
-func readPassword() string {
-	fmt.Print("Password: ")
-	password_bytes, _ := terminal.ReadPassword(0)
-	fmt.Println()
-	return strings.TrimSpace(string(password_bytes))
-}
-
-func clientLogin(username string, client tlj.Client) string {
-	for {
-		password := readPassword()
-		auth_request := AuthRequest{
-			Username: username,
-			Password: password,
-		}
-		req, _ := client.Request(auth_request)
-		resp_chan := make(chan string)
-		req.OnResponse(reflect.TypeOf(Message{}), func(iface interface{}) {
-			if message, ok := iface.(*Message); ok {
-				resp_chan <- message.String
-			}
-		})
-		response := <-resp_chan
-		if response != "failed" {
-			return response
-		}
-	}
-}
-
-func trustDialog(hostname, signature string) (bool, bool) {
-	fmt.Println(fmt.Sprintf(
-		"%s presents certificate with signature:\n%s",
-		hostname,
-		signature,
-	))
-	fmt.Println("[A]bort, [C]ontinue without saving, [S]ave and continue?")
-	connect := false
-	save := false
-	stdin := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print("> ")
-		line, _ := stdin.ReadString('\n')
-		text := strings.TrimSpace(line)
-		if text == "A" {
-			break
-		} else if text == "C" {
-			connect = true
-			break
-		} else if text == "S" {
-			connect = true
-			save = true
-			break
-		}
-	}
-	return connect, save
-}
-
-func mitmWarning(new_signature, old_signature string) (bool, bool) {
-	fmt.Println(
-		"WARNING: Remote certificate has changed!!\nold: %s\nnew: %s",
-		old_signature,
-		new_signature,
-	)
-	fmt.Println("[A]bort, [C]ontinue without updating, [U]pdate and continue?")
-	connect := false
-	update := false
-	stdin := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print("> ")
-		line, _ := stdin.ReadString('\n')
-		text := strings.TrimSpace(line)
-		if text == "A" {
-			break
-		} else if text == "C" {
-			connect = true
-			break
-		} else if text == "U" {
-			connect = true
-			update = true
-			break
-		}
-	}
-	return connect, update
 }
 
 func createClient(hostname string, port int) (tlj.Client, error) {
@@ -226,7 +108,28 @@ func createClient(hostname string, port int) (tlj.Client, error) {
 	return client, nil
 }
 
-func connectWorkers(hostname string, port int, worker_server tlj.Server, networks map[string]int, nonce string, resume bool) (streamers []tlj.StreamWriter, err error) {
+func connectWorkers(hostname string, port int, networks map[string]int, nonce string) (streamers []tlj.StreamWriter, err error) {
+	worker_server := tlj.Server{
+		TypeStore:       type_store,
+		Tag:             tag,
+		Tags:            make(map[net.Conn][]string),
+		Sockets:         make(map[string][]net.Conn),
+		Events:          make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
+		Requests:        make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
+		FailedServer:    make(chan error, 1),
+		FailedSockets:   make(chan net.Conn, 200),
+		TagManipulation: &sync.Mutex{},
+		InsertRequests:  &sync.Mutex{},
+		InsertEvents:    &sync.Mutex{},
+	}
+	go worker_server.process()
+	//worker_server := tlj.NewServer()
+	worker_server.Accept("peer", reflect.TypeOf(TransferChunk{}), func(_ tlj.TLJContext, iface interface{}) {
+		if chunk, ok := iface.(*TransferChunk); ok {
+			sentToChunkWriter(chunk)
+		}
+	})
+
 	worker_status_update_text := make(chan string)
 	worker_build_finished_text := make(chan string)
 	go printProgress(
@@ -448,7 +351,6 @@ func main() {
 	hostname = *flag.String("host", "", "hostname")
 	port = *flag.Int("port", 443, "port")
 	network_config = *flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
-	resume = *flag.Bool("resume", true, "resume transfers if a part of the file already exists on the destination")
 	chunk_size = *flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 	flag.Parse()
 
@@ -465,26 +367,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	worker_server := tlj.Server{
-		TypeStore:       type_store,
-		Tag:             tag,
-		Tags:            make(map[net.Conn][]string),
-		Sockets:         make(map[string][]net.Conn),
-		Events:          make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
-		Requests:        make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
-		FailedServer:    make(chan error, 1),
-		FailedSockets:   make(chan net.Conn, 200),
-		TagManipulation: &sync.Mutex{},
-		InsertRequests:  &sync.Mutex{},
-		InsertEvents:    &sync.Mutex{},
-	}
-	go worker_server.process()
-	worker_server.Accept("peer", reflect.TypeOf(TransferChunk{}), func(_ tlj.TLJContext, iface interface{}) {
-		if chunk, ok := iface.(*Chunk); ok {
-			sentToChunkWriter(chunk)
-		}
-	})
-	streamers, err := ConnectWorkers(hostname, port, worker_server, networks, nonce, resume)
+	streamers, err := ConnectWorkers(hostname, port, networks, nonce)
 	if err != nil {
 		log.Fatal(err)
 	}

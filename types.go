@@ -1,4 +1,4 @@
-package main
+package imux
 
 import (
 	"encoding/json"
@@ -47,9 +47,10 @@ func NewWorkerAuth(data []byte, _ tlj.TLJContext) interface{} {
 }
 
 type TransferChunk struct {
-	Filename string
-	ID       int
-	Data     []byte
+	Filename    string
+	Destination string
+	ID          int
+	Data        []byte
 }
 
 func NewTransferChunk(data []byte, _ tlj.TLJContext) interface{} {
