@@ -4,74 +4,126 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/dustin/go-humanize"
+	//"github.com/dustin/go-humanize"
 	"github.com/hkparker/TLJ"
 	"net"
+	"os"
 	"reflect"
 	"sync"
 	"time"
 )
 
-func MoveFiles(file_list []string, total_bytes int, streamers []tlj.StreamWriter) {
-	_, file_finished := CreatePooledChunkChan(file_list, 5*1024*1024)
-	file_finished_print := make(chan string)
-	status_update := make(chan string)
-	all_done := make(chan string)
-	worker_speeds := make(map[int]int)
-	moved_bytes := 0
-	total_update := make(chan int)
-	finished := false
-	start := time.Now()
-	for iter, _ := range streamers {
-		worker_speeds[iter] = 0
-		speed_update := make(chan int)
-		//go StreamChunksToPut(worker, chunks, speed_update, total_update)
-		go func(liter int) {
-			for speed := range speed_update {
-				worker_speeds[liter] = speed
-			}
-		}(iter)
-		go func() {
-			for moved := range total_update {
-				moved_bytes += moved
-			}
-		}()
+func StreamChunksToPut(worker tlj.StreamWriter, chunks chan TransferChunk, speed_update, total_update chan int) {
+	for chunk := range chunks {
+		// set start time
+		err := worker.Write(chunk)
+		if err != nil {
+			// make this chunk stale
+		}
+		// if this was the last chunk for a file, send back that the update was success
+		// take note of elapsed time and chunk size, update my speed, update amount moved
 	}
-	go func() {
-		for _, _ = range file_list {
-			file_finished_print <- <-file_finished
+}
+
+func CreatePooledChunkChan(files []string, chunk_size int) (all_chunks chan TransferChunk, file_done chan string) {
+	for _, file := range files {
+		queue := ReadQueue{
+			ChunkSize: chunk_size,
+			// assign destination name as
 		}
-		all_done <- fmt.Sprintf(
-			"%d file%s (%s) transferred in %s",
-			len(file_list),
-			(map[bool]string{true: "s", false: ""})[len(file_list) > 1],
-			humanize.Bytes(uint64(total_bytes)),
-			time.Since(start).String(),
-		)
-		finished = true
+		fh, ferr := os.Open(file)
+		if ferr == nil {
+			go func(filename string) {
+				queue.Process(fh)
+				file_done <- filename
+			}(file)
+			go func(filename string) {
+				for chunk := range queue.Chunks {
+					all_chunks <- chunk
+				}
+			}(file)
+		} else {
+			fmt.Println("skipping %s: %v", file, ferr)
+		}
+	}
+	return
+}
+
+func UploadFiles(file_list []string, total_bytes int, streamers []tlj.StreamWriter) {
+	all_chunks, file_finished := CreatePooledChunkChan(file_list, 5*1024*1024)
+	go func() {
+		<-all_chunks
+		fmt.Println("read chunk")
 	}()
 	go func() {
-		for {
-			if finished {
-				return
-			}
-			pool_speed := 0
-			for _, speed := range worker_speeds {
-				pool_speed += speed
-			}
-			byte_progress := moved_bytes / total_bytes
-			status_update <- fmt.Sprintf(
-				"transferring %d files (%s) at %s/s %s%% complete %s remaining",
-				len(file_list),
-				humanize.Bytes(uint64(total_bytes)),
-				humanize.Bytes(uint64(pool_speed)),
-				humanize.Ftoa(float64(int(byte_progress*10000))/100),
-				timeRemaining(pool_speed, total_bytes-moved_bytes),
-			)
-			time.Sleep(1 * time.Second)
-		}
+		<-file_finished
+		fmt.Println("read chunk")
 	}()
-	PrintProgress(file_finished_print, status_update, all_done)
+	// async read from the chunks and stream them up
+	// async read from the completed files and print an update
+	// async function to update speed regularly
+	// asyc function to check when all done and print the summary
+	// print progress
+
+	//PrintProgress(file_finished_print, upload_progress_update, upload_finished)
+
+	//file_finished_print := make(chan string)
+	//status_update := make(chan string)
+	//all_done := make(chan string)
+	//worker_speeds := make(map[int]int)
+	//moved_bytes := 0
+	//total_update := make(chan int)
+	//finished := false
+	//start := time.Now()
+	//for iter, worker := range streamers {
+	//	worker_speeds[iter] = 0
+	//	speed_update := make(chan int)
+	//	go StreamChunksToPut(worker, chunks, speed_update, total_update)
+	//	go func(liter int) {
+	//		for speed := range speed_update {
+	//			worker_speeds[liter] = speed
+	//		}
+	//	}(iter)
+	//	go func() {
+	//		for moved := range total_update {
+	//			moved_bytes += moved
+	//		}
+	//	}()
+	//}
+	//go func() {
+	//	for _, _ = range file_list {
+	//		file_finished_print <- <-file_finished
+	//	}
+	//	all_done <- fmt.Sprintf(
+	//		"%d file%s (%s) transferred in %s",
+	//		len(file_list),
+	//		(map[bool]string{true: "s", false: ""})[len(file_list) > 1],
+	//		humanize.Bytes(uint64(total_bytes)),
+	//		time.Since(start).String(),
+	//	)
+	//	finished = true
+	//}()
+	//go func() {
+	//	for {
+	//		if finished {
+	//			return
+	//		}
+	//		pool_speed := 0
+	//		for _, speed := range worker_speeds {
+	//			pool_speed += speed
+	//		}
+	//		byte_progress := moved_bytes / total_bytes
+	//		status_update <- fmt.Sprintf(
+	//			"transferring %d files (%s) at %s/s %s%% complete %s remaining",
+	//			len(file_list),
+	//			humanize.Bytes(uint64(total_bytes)),
+	//			humanize.Bytes(uint64(pool_speed)),
+	//			humanize.Ftoa(float64(int(byte_progress*10000))/100),
+	//			timeRemaining(pool_speed, total_bytes-moved_bytes),
+	//		)
+	//		time.Sleep(1 * time.Second)
+	//	}
+	//}()
 }
 
 func timeRemaining(speed, remaining int) string {

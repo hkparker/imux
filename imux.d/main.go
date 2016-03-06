@@ -46,8 +46,8 @@ func commandLoop(control tlj.Client, workers []tlj.StreamWriter, chunk_size int)
 			//PrintProgress(file_finished, speed_update, all_done)
 			// get updates from server?
 		} else if command == "put" {
-			//file_list, total_bytes := ParseFileList(args)
-			//MoveFiles(file_list, workers)
+			file_list, total_bytes := imux.ParseFileList(args)
+			imux.UploadFiles(file_list, total_bytes, workers)
 		} else if command == "exit" {
 			control.Request(imux.Command{
 				Command: "exit",

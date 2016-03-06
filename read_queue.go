@@ -24,6 +24,7 @@ func (queue *ReadQueue) Process(file *os.File) {
 		}
 		new_chunk := TransferChunk{}
 		new_chunk.ID = queue.ChunkID
+		// assign the new_chunk's destination file name here?
 		queue.ChunkID++
 		new_chunk_data := make([]byte, queue.ChunkSize)
 		bytes_read, err := file.Read(new_chunk_data)
@@ -34,7 +35,6 @@ func (queue *ReadQueue) Process(file *os.File) {
 			new_chunk_data = new_chunk_data[:bytes_read]
 		}
 		new_chunk.Data = new_chunk_data
-		// assign the new_chunk's destination file name here?
 		queue.Chunks <- new_chunk
 	}
 	close(queue.Chunks)
