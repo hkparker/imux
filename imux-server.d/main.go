@@ -17,11 +17,11 @@ import (
 	"time"
 )
 
-var listen string
-var port int
-var daemon bool
-var cert string
-var key string
+var listen = *flag.String("listen", "0.0.0.0", "address to listen on")
+var port = *flag.Int("port", 443, "port to listen on")
+var daemon = *flag.Bool("daemon", false, "run the server in the background")
+var cert = *flag.String("cert", "cert.pem", "pem file with certificate to present")
+var key = *flag.String("key", "key.pem", "pem file with key for certificate")
 
 var user_clients = make(map[string]tlj.Client)
 var good_nonce = make(map[string]string)
@@ -159,11 +159,6 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 }
 
 func main() {
-	listen = *flag.String("listen", "0.0.0.0", "address to listen on")
-	port = *flag.Int("port", 443, "port to listen on")
-	daemon = *flag.Bool("daemon", false, "run the server in the background")
-	cert = *flag.String("cert", "cert.pem", "pem file with certificate to present")
-	key = *flag.String("key", "key.pem", "pem file with key for certificate")
 	flag.Parse()
 
 	if current_user, _ := user.Current(); current_user.Uid != "0" {

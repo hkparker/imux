@@ -14,12 +14,12 @@ import (
 	"strings"
 )
 
-var username string
-var hostname string
-var port int
-var network_config string
-var resume bool
-var chunk_size int
+var current_user, _ = user.Current()
+var username = *flag.String("user", current_user.Username, "username")
+var hostname = *flag.String("host", "", "hostname")
+var port = *flag.Int("port", 443, "port")
+var network_config = *flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
+var chunk_size = *flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 
 var type_store tlj.TypeStore
 
@@ -77,12 +77,6 @@ func commandLoop(control tlj.Client, workers []tlj.StreamWriter, chunk_size int)
 }
 
 func main() {
-	u, _ := user.Current()
-	username = *flag.String("user", u.Username, "username")
-	hostname = *flag.String("host", "", "hostname")
-	port = *flag.Int("port", 443, "port")
-	network_config = *flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
-	chunk_size = *flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 	flag.Parse()
 
 	networks, err := imux.ParseNetworks(network_config)
