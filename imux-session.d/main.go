@@ -117,7 +117,7 @@ func Remove(items []string) string {
 func DisplayHelp(_ []string) string {
 	account, _ := user.Current()
 	directory := account.HomeDir
-	return "\nMultiplexity by hkparker\n" +
+	return "\nimux by hkparker\n" +
 		"\n\tFilesystem:\n\n" +
 		"\tls [directory || .]\n" +
 		"\tcd [directory || " + directory + "]\n" +
@@ -136,7 +136,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 	type_store := imux.BuildTypeStore()
 	server := tlj.NewServer(listener, imux.TagSocketAll, type_store)
 	server.AcceptRequest(
-		"all",
+		"peer",
 		reflect.TypeOf(imux.Command{}),
 		func(iface interface{}, context tlj.TLJContext) {
 			if command, ok := iface.(*imux.Command); ok {
@@ -163,7 +163,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 	)
 
 	server.Accept(
-		"all",
+		"peer",
 		reflect.TypeOf(imux.TransferChunk{}),
 		func(iface interface{}, _ tlj.TLJContext) {
 			if _, ok := iface.(*imux.TransferChunk); ok {
@@ -195,7 +195,7 @@ func main() {
 	}
 	server := NewTLJServer(discard_listener)
 	server.Insert(control_socket)
-	// tag control socket as a peer
+	server.TagSocket(control_socket, "peer")
 	err = <-server.FailedServer
 	fmt.Println(err)
 }

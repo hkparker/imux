@@ -44,7 +44,7 @@ func MoveFiles(file_list []string, total_bytes int, streamers []tlj.StreamWriter
 		all_done <- fmt.Sprintf(
 			"%d file%s (%s) transferred in %s",
 			len(file_list),
-			(map[bool]string{true: "s", false: ""})[len(file_list) > 1], // deal with it ಠ_ಠ
+			(map[bool]string{true: "s", false: ""})[len(file_list) > 1],
 			humanize.Bytes(uint64(total_bytes)),
 			time.Since(start).String(),
 		)
@@ -152,7 +152,8 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 			case stream_writer := <-streamer_chan:
 				success_worker_count += 1
 				streamers = append(streamers, stream_writer)
-				worker_server.Insert(stream_writer.Socket) // also tag as a peer
+				worker_server.Insert(stream_writer.Socket)
+				worker_server.TagSocket(stream_writer.Socket, "peer")
 			case <-failed_worker_reporter:
 				failed_worker_count += 1
 			case <-halt_prints:
