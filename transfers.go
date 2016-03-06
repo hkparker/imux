@@ -111,7 +111,6 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 	for _, count := range networks {
 		for i := 0; i < count; i++ {
 			go func() {
-				defer worker_waiter.Done()
 				//dialer := bind
 				conn, err := tls.Dial(
 					"tcp",
@@ -165,6 +164,7 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 				total_worker_count,
 				failed_worker_count,
 			)
+			worker_waiter.Done()
 		}
 	}()
 
