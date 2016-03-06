@@ -44,9 +44,10 @@ func commandLoop(control tlj.Client, workers []tlj.StreamWriter, chunk_size int)
 			// file finished are send by write buffer to global current_transfer chan
 			// speed updates are 1 per second?  need to ask every worker?  (workers update global speed store, sum that)
 			//PrintProgress(file_finished, speed_update, all_done)
+			// get updates from server?
 		} else if command == "put" {
 			//file_list, total_bytes := ParseFileList(args)
-			//uploadFiles(file_list, total_bytes, []tlj.StreamWriter{})
+			//MoveFiles(file_list, workers)
 		} else if command == "exit" {
 			control.Request(imux.Command{
 				Command: "exit",

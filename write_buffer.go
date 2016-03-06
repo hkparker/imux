@@ -9,7 +9,6 @@ type WriteBuffer struct {
 }
 
 func (buffer *WriteBuffer) Insert(chunk TransferChunk) {
-	// keep track of estimated speed of the buffer
 	smaller := 0
 	for _, item := range buffer.Queue {
 		if item.ID < chunk.ID {
@@ -31,7 +30,6 @@ func (buffer *WriteBuffer) Dump(file *os.File) {
 			buffer.Queue = buffer.Queue[1:]
 			file.Write(chunk.Data)
 			buffer.LastDump = buffer.LastDump + 1
-			// if the last dump is equal to the size, send down done channel
 		} else {
 			break
 		}

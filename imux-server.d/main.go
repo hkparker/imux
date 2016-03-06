@@ -1,17 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"github.com/hkparker/TLJ"
 	"github.com/hkparker/imux"
-	"github.com/kless/osutil/user/crypt/sha512_crypt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -19,96 +13,19 @@ import (
 	"os/user"
 	"reflect"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 )
 
+var listen string
+var port int
+var daemon bool
+var cert string
+var key string
+
 var user_clients = make(map[string]tlj.Client)
 var good_nonce = make(map[string]string)
 var hooked_up = make(map[string]bool)
-
-func NewNonce() (string, error) {
-	bytes := make([]byte, 64)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
-}
-
-func PrepareTLSConfig(pem, key string) tls.Config {
-	ca_b, _ := ioutil.ReadFile(pem)
-	ca, _ := x509.ParseCertificate(ca_b)
-	priv_b, _ := ioutil.ReadFile(key)
-	priv, _ := x509.ParsePKCS1PrivateKey(priv_b)
-	pool := x509.NewCertPool()
-	pool.AddCert(ca)
-	cert := tls.Certificate{
-		Certificate: [][]byte{ca_b},
-		PrivateKey:  priv,
-	}
-	config := tls.Config{
-		Certificates: []tls.Certificate{cert},
-		ClientCAs:    pool,
-	}
-	config.MinVersion = tls.VersionTLS12
-	config.Rand = rand.Reader
-	return config
-}
-
-func LookupHashAndHeader(username string) (string, string) {
-	file, err := os.Open("/etc/shadow")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		split_colon := func(c rune) bool {
-			return c == 58
-		}
-		split_dollar := func(c rune) bool {
-			return c == 36
-		}
-		fields := strings.FieldsFunc(line, split_colon)
-		if fields[0] == username {
-			pw_fields := strings.FieldsFunc(fields[1], split_dollar)
-			header := "$" + pw_fields[0] + "$" + pw_fields[1]
-			return fields[1], header
-		}
-	}
-	return "", ""
-}
-
-func Login(username, password string) bool {
-	_, err := user.Lookup(username)
-	if err != nil {
-		return false
-	}
-	passwd_crypt := sha512_crypt.New()
-	hash, header := LookupHashAndHeader(username)
-	new_hash, err := passwd_crypt.Generate([]byte(password), []byte(header))
-	if err != nil {
-		return false
-	}
-	if new_hash != hash {
-		return false
-	}
-	return true
-}
-
-func UsernameFromTags(tags []string) string {
-	for _, tag := range tags {
-		if len(tag) > 5 {
-			if tag[:5] == "user:" {
-				return tag[5:]
-			}
-		}
-	}
-	return ""
-}
 
 func ForkUserProc(nonce, username string) {
 	client_created := make(chan bool, 1)
@@ -140,7 +57,7 @@ func ForkUserProc(nonce, username string) {
 	}()
 
 	<-listening
-	cmd := exec.Command("./session", ipc_filename)
+	cmd := exec.Command("./imux-session", ipc_filename)
 	cmd.SysProcAttr = &syscall.SysProcAttr{}
 	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
 	cmd.Stdout = os.Stdout
@@ -148,39 +65,16 @@ func ForkUserProc(nonce, username string) {
 	<-client_created
 }
 
-func TagSocketAll(socket net.Conn, server *tlj.Server) {
-	server.Tags[socket] = append(server.Tags[socket], "all")
-	server.Sockets["all"] = append(server.Sockets["all"], socket)
-}
-
-//func HookupChunkAction(server tlj.Server, nonce, username string, user_clients map[string]tlj.Client) {
-//	if ok, _ := hooked_up[nonce]; ok {
-//		return
-//	}
-//	hooked_up[nonce] = true
-//	server.Accept(
-//		nonce,
-//		reflect.TypeOf(TransferChunk{}),
-//		func(iface interface{}, _ tlj.TLJContext) {
-//			if chunk, ok := iface.(*TransferChunk); ok {
-//				if client, ok := user_clients[username]; ok {
-//					client.Message(chunk)
-//				}
-//			}
-//		},
-//	)
-//}
-
 func NewTLJServer(listener net.Listener) tlj.Server {
 	type_store := imux.BuildTypeStore()
-	server := tlj.NewServer(listener, TagSocketAll, type_store)
+	server := tlj.NewServer(listener, imux.TagSocketAll, type_store)
 	server.AcceptRequest(
 		"all",
 		reflect.TypeOf(imux.AuthRequest{}),
 		func(iface interface{}, context tlj.TLJContext) {
 			if auth_request, ok := iface.(*imux.AuthRequest); ok {
-				if Login(auth_request.Username, auth_request.Password) {
-					nonce, err := NewNonce()
+				if imux.Login(auth_request.Username, auth_request.Password) {
+					nonce, err := imux.NewNonce()
 					if err == nil {
 						server.Tags[context.Socket] = append(server.Tags[context.Socket], "control")
 						server.Sockets["control"] = append(server.Sockets["control"], context.Socket)
@@ -209,14 +103,9 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 		func(iface interface{}, context tlj.TLJContext) {
 			if worker_ready, ok := iface.(*imux.WorkerAuth); ok {
 				if _, ok := good_nonce[worker_ready.Nonce]; ok {
-					server.Tags[context.Socket] = append(server.Tags[context.Socket], worker_ready.Nonce)
-					server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], context.Socket)
-					//HookupChunkAction(server, worker_ready.Nonce, username, user_clients)
-					// create the chunk distributor if needed
-					// 	for
-					// 		read from the chunk channel
-					// 		responder.Respond with the chunk
-					// 		break if there was an error
+					// tag as a worker and with nonce
+					//:server.Tags[context.Socket] = append(server.Tags[context.Socket], worker_ready.Nonce)
+					//server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], context.Socket)
 				}
 			}
 		},
@@ -227,7 +116,7 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 		reflect.TypeOf(imux.Command{}),
 		func(iface interface{}, context tlj.TLJContext) {
 			if command, ok := iface.(*imux.Command); ok {
-				username := UsernameFromTags(server.Tags[context.Socket])
+				username := imux.UsernameFromTags(server.Tags[context.Socket])
 				if client, ok := user_clients[username]; ok {
 					req, err := client.Request(command)
 					if err != nil {
@@ -242,35 +131,39 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 						}
 					})
 					// if command.Command == "get" {
-					//	req := ...
 					//	req.OnResponse(reflect.TypeOf(TransferChunk{}), func(iface interface{}) {
 					//		if chunk, cast := iface.(*TransferChunk); cast {
-					//			chunk_distributor[nonce] <- chunk
+					//			chunk_distributor[nonce] <- chunk  // chunks come from session IPC out worker sockets
 					//		}
 					//	})
-					//	// on response message, send that back down the socket
 					//}
 				}
 			}
 		},
 	)
 
-	//server.AcceptRequest(
-	//	"",
-	//	reflect.TypeOf(),
-	//	func(iface interface{}, responder tlj.Responder) {
-	//	},
-	//)
+	server.Accept(
+		"worker",
+		reflect.TypeOf(imux.TransferChunk{}),
+		func(iface interface{}, context tlj.TLJContext) {
+			if chunk, ok := iface.(*imux.TransferChunk); ok {
+				username := imux.UsernameFromTags(server.Tags[context.Socket])
+				if client, ok := user_clients[username]; ok {
+					client.Message(chunk)
+				}
+			}
+		},
+	)
 
 	return server
 }
 
 func main() {
-	var listen = flag.String("listen", "0.0.0.0", "address to listen on")
-	var port = flag.Int("port", 443, "port to listen on")
-	//var daemon = flag.Bool("daemon", false, "run the server in the background")
-	var cert = flag.String("cert", "ca.pem", "pem file with certificate to present")
-	var key = flag.String("key", "ca.key", "pem file with key for certificate")
+	listen = *flag.String("listen", "0.0.0.0", "address to listen on")
+	port = *flag.Int("port", 443, "port to listen on")
+	daemon = *flag.Bool("daemon", false, "run the server in the background")
+	cert = *flag.String("cert", "cert.pem", "pem file with certificate to present")
+	key = *flag.String("key", "key.pem", "pem file with key for certificate")
 	flag.Parse()
 
 	if current_user, _ := user.Current(); current_user.Uid != "0" {
@@ -278,29 +171,23 @@ func main() {
 	}
 	log_file, err := os.OpenFile("/var/log/multiplexity.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
-		fmt.Println("can't open log")
-		return
+		log.Fatal("can't open log")
 	}
 	defer log_file.Close()
 	log.SetOutput(log_file)
 	log.Println("starting imux server")
 
-	config := PrepareTLSConfig(*cert, *key)
-	address := fmt.Sprintf(
-		"%s:%d",
-		*listen,
-		*port,
-	)
+	config := imux.PrepareTLSConfig(cert, key)
+	address := fmt.Sprintf("%s:%d", listen, port)
 	listener, err := tls.Listen("tcp", address, &config)
 	if err != nil {
-		fmt.Println("error starting server: %s", err)
-		return
+		log.Fatal("error starting server: %s", err)
 	}
 
 	server := NewTLJServer(listener)
-
-	// Daemonize
-
+	if daemon {
+		// Daemonize
+	}
 	err = <-server.FailedServer
 	log.Println("server closed: %s", err)
 }

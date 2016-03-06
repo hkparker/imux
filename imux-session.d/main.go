@@ -132,14 +132,9 @@ func DisplayHelp(_ []string) string {
 		"\texit\n"
 }
 
-func TagSocketAll(socket net.Conn, server *tlj.Server) {
-	server.Tags[socket] = append(server.Tags[socket], "all")
-	server.Sockets["all"] = append(server.Sockets["all"], socket)
-}
-
 func NewTLJServer(listener net.Listener) tlj.Server {
 	type_store := imux.BuildTypeStore()
-	server := tlj.NewServer(listener, TagSocketAll, type_store)
+	server := tlj.NewServer(listener, imux.TagSocketAll, type_store)
 	server.AcceptRequest(
 		"all",
 		reflect.TypeOf(imux.Command{}),
@@ -152,7 +147,6 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 					//responder.Respond(Message{}) // file names and sizes... already part of previous return?
 					//chunks := CreatePooledChunkChan(file_list)
 					// send the requested files down the responder as chunks
-				} else if command.Command == "put" {
 				} else {
 					if function, present := commands[command.Command]; present {
 						context.Respond(imux.Message{
@@ -173,10 +167,10 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 		reflect.TypeOf(imux.TransferChunk{}),
 		func(iface interface{}, _ tlj.TLJContext) {
 			if _, ok := iface.(*imux.TransferChunk); ok {
-				// if buffers[chunk.destination_path] == nil {
-				// 	assign it to a new buffer
+				// if buffers[chunk.Destination] == nil {
+				// 	assign buffer to a new buffer
 				//}
-				// buffer.Insert(chunk)
+				//buffer.Insert(chunk)
 				//if buffer.LastWrite == file size {
 				// 	close the buffer
 				//}
@@ -201,6 +195,7 @@ func main() {
 	}
 	server := NewTLJServer(discard_listener)
 	server.Insert(control_socket)
+	// tag control socket as a peer
 	err = <-server.FailedServer
 	fmt.Println(err)
 }

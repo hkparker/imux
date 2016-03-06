@@ -97,6 +97,17 @@ func PrintProgress(completed_files, statuses, finished chan string) {
 
 func ParseNetworks(data string) (map[string]int, error) {
 	networks := make(map[string]int)
-	networks["0.0.0.0"] = 2
+	networks["0.0.0.0"] = 20
 	return networks, nil
+}
+
+func UsernameFromTags(tags []string) string {
+	for _, tag := range tags {
+		if len(tag) > 5 {
+			if tag[:5] == "user:" {
+				return tag[5:]
+			}
+		}
+	}
+	return ""
 }

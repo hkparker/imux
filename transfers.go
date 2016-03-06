@@ -95,11 +95,6 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 
 	worker_status_update_text := make(chan string)
 	worker_build_finished_text := make(chan string)
-	go PrintProgress(
-		make(chan string),
-		worker_status_update_text,
-		worker_build_finished_text,
-	)
 
 	streamer_chan := make(chan tlj.StreamWriter)
 	success_worker_count := 0
@@ -172,19 +167,28 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 			)
 		}
 	}()
-	worker_waiter.Wait()
-	halt_prints <- true
 
-	worker_build_finished_text <- fmt.Sprintf(
-		"%d/%d transfer sockets built, %d failed in %s",
-		success_worker_count,
-		total_worker_count,
-		failed_worker_count,
-		time.Since(start).String(),
+	go func() {
+		worker_waiter.Wait()
+		halt_prints <- true
+
+		worker_build_finished_text <- fmt.Sprintf(
+			"%d/%d transfer sockets built, %d failed in %s",
+			success_worker_count,
+			total_worker_count,
+			failed_worker_count,
+			time.Since(start).String(),
+		)
+	}()
+
+	PrintProgress(
+		make(chan string),
+		worker_status_update_text,
+		worker_build_finished_text,
 	)
+
 	if total_worker_count == failed_worker_count {
 		err = errors.New("all transfer sockets failed to build")
-		return
 	}
 	return
 }

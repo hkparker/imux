@@ -2,14 +2,20 @@ package imux
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"github.com/hkparker/TLJ"
+	"github.com/kless/osutil/user/crypt/sha512_crypt"
 	"golang.org/x/crypto/ssh/terminal"
+	"io/ioutil"
 	"log"
 	"os"
+	"os/user"
 	"reflect"
 	"strings"
 )
@@ -133,4 +139,91 @@ func MitMWarning(new_signature, old_signature string) (bool, bool) {
 		}
 	}
 	return connect, update
+}
+
+func NewNonce() (string, error) {
+	bytes := make([]byte, 64)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
+}
+
+func PrepareTLSConfig(pem, key string) tls.Config {
+	ca_b, err := ioutil.ReadFile(pem)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	ca, err := x509.ParseCertificate(ca_b)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	priv_b, err := ioutil.ReadFile(key)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	priv, err := x509.ParsePKCS1PrivateKey(priv_b)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(ca)
+	cert := tls.Certificate{
+		Certificate: [][]byte{ca_b},
+		PrivateKey:  priv,
+	}
+	config := tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    pool,
+	}
+	config.MinVersion = tls.VersionTLS12
+	config.Rand = rand.Reader
+	return config
+}
+
+func LookupHashAndHeader(username string) (string, string) {
+	file, err := os.Open("/etc/shadow")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		split_colon := func(c rune) bool {
+			return c == 58
+		}
+		split_dollar := func(c rune) bool {
+			return c == 36
+		}
+		fields := strings.FieldsFunc(line, split_colon)
+		if fields[0] == username {
+			pw_fields := strings.FieldsFunc(fields[1], split_dollar)
+			header := "$" + pw_fields[0] + "$" + pw_fields[1]
+			return fields[1], header
+		}
+	}
+	return "", ""
+}
+
+func Login(username, password string) bool {
+	_, err := user.Lookup(username)
+	if err != nil {
+		return false
+	}
+	passwd_crypt := sha512_crypt.New()
+	hash, header := LookupHashAndHeader(username)
+	new_hash, err := passwd_crypt.Generate([]byte(password), []byte(header))
+	if err != nil {
+		return false
+	}
+	if new_hash != hash {
+		return false
+	}
+	return true
 }
