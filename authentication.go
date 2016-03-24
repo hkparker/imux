@@ -6,10 +6,10 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"github.com/hkparker/TLJ"
+	b58 "github.com/jbenet/go-base58"
 	"github.com/kless/osutil/user/crypt/sha512_crypt"
 	"golang.org/x/crypto/ssh/terminal"
 	"io/ioutil"
@@ -20,9 +20,16 @@ import (
 	"strings"
 )
 
+var conf_dir_path = "/.imux/"
+var known_hosts_path = conf_dir_path + "known_hosts"
+
 func LoadKnownHosts() map[string]string {
 	sigs := make(map[string]string)
-	filename := os.Getenv("HOME") + "/.multiplexity/known_hosts"
+	conf_dir := os.Getenv("HOME") + conf_dir_path
+	if _, err := os.Stat(conf_dir); os.IsNotExist(err) {
+		os.MkdirAll(conf_dir, 0700)
+	}
+	filename := os.Getenv("HOME") + known_hosts_path
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		os.Create(filename)
 		return sigs
@@ -41,7 +48,7 @@ func LoadKnownHosts() map[string]string {
 }
 
 func AppendKnownHost(hostname string, signature string) {
-	filename := os.Getenv("HOME") + "/.multiplexity/known_hosts"
+	filename := os.Getenv("HOME") + known_hosts_path
 	known_hosts, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		log.Fatal(err)
@@ -142,12 +149,12 @@ func MitMWarning(new_signature, old_signature string) (bool, bool) {
 }
 
 func NewNonce() (string, error) {
-	bytes := make([]byte, 64)
+	bytes := make([]byte, 32)
 	_, err := rand.Read(bytes)
 	if err != nil {
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
+	return b58.Encode(bytes), nil
 }
 
 func PrepareTLSConfig(pem, key string) tls.Config {
