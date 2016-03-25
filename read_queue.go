@@ -1,7 +1,6 @@
 package imux
 
 import (
-	"io"
 	"os"
 )
 
@@ -11,11 +10,11 @@ type ReadQueue struct {
 	FileHead    int64
 	ChunkSize   int
 	ChunkID     int
+	Destination string
 }
 
 func (queue *ReadQueue) Process(file *os.File) {
-	queue.Chunks = make(chan TransferChunk)
-	queue.StaleChunks = make(chan TransferChunk, 10)
+	queue.StaleChunks = make(chan TransferChunk)
 	queue.ChunkID = 1
 	file.Seek(queue.FileHead, 0)
 	for {
@@ -24,11 +23,11 @@ func (queue *ReadQueue) Process(file *os.File) {
 		}
 		new_chunk := TransferChunk{}
 		new_chunk.ID = queue.ChunkID
-		// assign the new_chunk's destination file name here?
+		new_chunk.Destination = queue.Destination
 		queue.ChunkID++
 		new_chunk_data := make([]byte, queue.ChunkSize)
 		bytes_read, err := file.Read(new_chunk_data)
-		if err == io.EOF {
+		if err != nil {
 			break
 		}
 		if bytes_read < queue.ChunkSize {

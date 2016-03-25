@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"github.com/hkparker/TLJ"
 	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 func TagSocketAll(socket net.Conn, server *tlj.Server) {
@@ -12,14 +16,35 @@ func TagSocketAll(socket net.Conn, server *tlj.Server) {
 }
 
 func ParseFileList(items []string) ([]string, int) {
-	// for each string which should be a full path
-	// if it is a directory
-	all_files := items //make([]string, 0)
-	//visitor := func() {
-	// if the item is a readable file, add it to the list
-	//}
-	//walk
-	return all_files, 100 // also return the size in bytes of all files
+	final_list := make([]string, 0)
+	total_size := 0
+
+	visitor := func(path string, file os.FileInfo, err error) error {
+		fmt.Printf("%s with %d bytes\n", path, file.Size())
+		if file.Mode().IsRegular() {
+			final_list = append(final_list, path)
+			total_size += int(file.Size())
+		}
+		return nil
+	}
+
+	for _, item := range items {
+		fh, err := os.Open(item)
+		defer fh.Close()
+		if err == nil {
+			fi, err := fh.Stat()
+			if err == nil {
+				if fi.Mode().IsDir() {
+					filepath.Walk(item, visitor)
+				} else if fi.Mode().IsRegular() {
+					final_list = append(final_list, item)
+					total_size += int(fi.Size())
+				}
+			}
+		}
+	}
+
+	return final_list, total_size
 }
 
 func PrintProgress(completed_files, statuses, finished chan string) {
@@ -58,10 +83,15 @@ func PrintProgress(completed_files, statuses, finished chan string) {
 	}
 }
 
-func ParseNetworks(data string) (map[string]int, error) {
-	networks := make(map[string]int)
-	networks["0.0.0.0"] = 20
-	return networks, nil
+func ParseNetworks(networks string) map[string]int {
+	nets := make(map[string]int)
+	pairs := strings.Split(networks, ";")
+	for _, pair := range pairs {
+		config := strings.Split(pair, ":")
+		count, _ := strconv.Atoi(config[1])
+		nets[config[0]] = count
+	}
+	return nets
 }
 
 func UsernameFromTags(tags []string) string {

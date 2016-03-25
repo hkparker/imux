@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	//"github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/hkparker/TLJ"
 	"net"
 	"os"
@@ -13,117 +13,96 @@ import (
 	"time"
 )
 
-func StreamChunksToPut(worker tlj.StreamWriter, chunks chan TransferChunk, speed_update, total_update chan int) {
+func StreamChunksDownWorker(worker tlj.StreamWriter, chunks, stale_chunks chan TransferChunk) {
 	for chunk := range chunks {
-		// set start time
 		err := worker.Write(chunk)
 		if err != nil {
-			// make this chunk stale
+			stale_chunks <- chunk
 		}
-		// if this was the last chunk for a file, send back that the update was success
-		// take note of elapsed time and chunk size, update my speed, update amount moved
 	}
 }
 
-func CreatePooledChunkChan(files []string, chunk_size int) (all_chunks chan TransferChunk, file_done chan string) {
+func CreatePooledChunkChan(files []string, chunk_size, total_bytes int) (chan TransferChunk, chan string, chan string, chan string, chan TransferChunk) {
+	all_chunks := make(chan TransferChunk)
+	file_done := make(chan string)
+	progress_update := make(chan string)
+	transfer_finished := make(chan string)
+	stale_chunks := make(chan TransferChunk)
+	all_files := &sync.WaitGroup{}
+	all_files.Add(len(files))
+
+	pool_speed := 0
+	moved_bytes := 0
+	moved_bytes_update := &sync.Mutex{}
+
+	start := time.Now()
 	for _, file := range files {
 		queue := ReadQueue{
-			ChunkSize: chunk_size,
-			// assign destination name as
+			ChunkSize:   chunk_size,
+			Chunks:      make(chan TransferChunk, 1),
+			Destination: file,
 		}
 		fh, ferr := os.Open(file)
 		if ferr == nil {
-			go func(filename string) {
-				queue.Process(fh)
+			go func(file_handler *os.File, filename string, read_queue ReadQueue) {
+				read_queue.Process(file_handler)
+				all_files.Done()
 				file_done <- filename
-			}(file)
-			go func(filename string) {
-				for chunk := range queue.Chunks {
+			}(fh, file, queue)
+			go func(filename string, read_queue ReadQueue) {
+				for chunk := range read_queue.Chunks {
+					//chunk_start := time.Now()
 					all_chunks <- chunk
+					moved_bytes_update.Lock()
+					moved_bytes += len(chunk.Data)
+					moved_bytes_update.Unlock()
+					// update my part of the pool speed
 				}
-			}(file)
+			}(file, queue)
 		} else {
-			fmt.Println("skipping %s: %v", file, ferr)
+			fmt.Println(fmt.Sprintf("skipping %s: %v", file, ferr))
 		}
 	}
-	return
+
+	go func() {
+		//stale := <-stale_chunks
+		//lookup the read queue and write it back if it exists
+	}()
+
+	go func() {
+		all_files.Wait()
+		transfer_finished <- fmt.Sprintf(
+			"%d file%s (%s) transferred in %s",
+			len(files),
+			(map[bool]string{true: "s", false: ""})[len(files) > 1],
+			humanize.Bytes(uint64(total_bytes)),
+			time.Since(start).String(),
+		)
+	}()
+
+	go func() {
+		for {
+			progress_update <- fmt.Sprintf(
+				"transferring %d files (%s) at %s/s %s%% complete %s remaining",
+				len(files),
+				humanize.Bytes(uint64(total_bytes)),
+				humanize.Bytes(uint64(pool_speed)),
+				humanize.Ftoa(float64(int((moved_bytes/total_bytes)*10000))/100),
+				timeRemaining(pool_speed, total_bytes-moved_bytes),
+			)
+			time.Sleep(1 * time.Second)
+		}
+	}()
+
+	return all_chunks, file_done, progress_update, transfer_finished, stale_chunks
 }
 
-func UploadFiles(file_list []string, total_bytes int, streamers []tlj.StreamWriter) {
-	all_chunks, file_finished := CreatePooledChunkChan(file_list, 5*1024*1024)
-	go func() {
-		<-all_chunks
-		fmt.Println("read chunk")
-	}()
-	go func() {
-		<-file_finished
-		fmt.Println("read chunk")
-	}()
-	// async read from the chunks and stream them up
-	// async read from the completed files and print an update
-	// async function to update speed regularly
-	// asyc function to check when all done and print the summary
-	// print progress
-
-	//PrintProgress(file_finished_print, upload_progress_update, upload_finished)
-
-	//file_finished_print := make(chan string)
-	//status_update := make(chan string)
-	//all_done := make(chan string)
-	//worker_speeds := make(map[int]int)
-	//moved_bytes := 0
-	//total_update := make(chan int)
-	//finished := false
-	//start := time.Now()
-	//for iter, worker := range streamers {
-	//	worker_speeds[iter] = 0
-	//	speed_update := make(chan int)
-	//	go StreamChunksToPut(worker, chunks, speed_update, total_update)
-	//	go func(liter int) {
-	//		for speed := range speed_update {
-	//			worker_speeds[liter] = speed
-	//		}
-	//	}(iter)
-	//	go func() {
-	//		for moved := range total_update {
-	//			moved_bytes += moved
-	//		}
-	//	}()
-	//}
-	//go func() {
-	//	for _, _ = range file_list {
-	//		file_finished_print <- <-file_finished
-	//	}
-	//	all_done <- fmt.Sprintf(
-	//		"%d file%s (%s) transferred in %s",
-	//		len(file_list),
-	//		(map[bool]string{true: "s", false: ""})[len(file_list) > 1],
-	//		humanize.Bytes(uint64(total_bytes)),
-	//		time.Since(start).String(),
-	//	)
-	//	finished = true
-	//}()
-	//go func() {
-	//	for {
-	//		if finished {
-	//			return
-	//		}
-	//		pool_speed := 0
-	//		for _, speed := range worker_speeds {
-	//			pool_speed += speed
-	//		}
-	//		byte_progress := moved_bytes / total_bytes
-	//		status_update <- fmt.Sprintf(
-	//			"transferring %d files (%s) at %s/s %s%% complete %s remaining",
-	//			len(file_list),
-	//			humanize.Bytes(uint64(total_bytes)),
-	//			humanize.Bytes(uint64(pool_speed)),
-	//			humanize.Ftoa(float64(int(byte_progress*10000))/100),
-	//			timeRemaining(pool_speed, total_bytes-moved_bytes),
-	//		)
-	//		time.Sleep(1 * time.Second)
-	//	}
-	//}()
+func UploadFiles(file_list []string, total_bytes int, streamers []tlj.StreamWriter, chunk_size int) {
+	all_chunks, file_finished, progress_update, transfer_finished, stale_chunks := CreatePooledChunkChan(file_list, chunk_size, total_bytes)
+	for _, worker := range streamers {
+		go StreamChunksDownWorker(worker, all_chunks, stale_chunks)
+	}
+	PrintProgress(file_finished, progress_update, transfer_finished)
 }
 
 func timeRemaining(speed, remaining int) string {
@@ -163,15 +142,24 @@ func ConnectWorkers(hostname string, port int, networks map[string]int, nonce st
 	for _, count := range networks {
 		for i := 0; i < count; i++ {
 			go func() {
-				//dialer := bind
-				conn, err := tls.Dial(
+				//dialer := net.Dialer{
+				//	LocalAddr: net.ParseIP(network),
+				//}
+				conn, err := tls.Dial( //WithDialer(
+					//&dialer,
 					"tcp",
 					fmt.Sprintf("%s:%d", hostname, port),
 					&tls.Config{
 						InsecureSkipVerify: true,
 					},
-					// need to check sig too
 				)
+				signature := SHA256Sig(conn)
+				known_hosts := LoadKnownHosts()
+				if saved_signature, present := known_hosts[conn.RemoteAddr().String()]; present {
+					if signature != saved_signature {
+						err = errors.New("TLS signature validation for worker failed")
+					}
+				}
 				if err != nil {
 					failed_worker_reporter <- true
 					return

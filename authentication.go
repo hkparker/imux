@@ -27,7 +27,7 @@ func LoadKnownHosts() map[string]string {
 	sigs := make(map[string]string)
 	conf_dir := os.Getenv("HOME") + conf_dir_path
 	if _, err := os.Stat(conf_dir); os.IsNotExist(err) {
-		os.MkdirAll(conf_dir, 0700)
+		os.Mkdir(conf_dir, 0700)
 	}
 	filename := os.Getenv("HOME") + known_hosts_path
 	if _, err := os.Stat(filename); os.IsNotExist(err) {

@@ -15,11 +15,11 @@ import (
 )
 
 var current_user, _ = user.Current()
-var username = *flag.String("user", current_user.Username, "username")
-var hostname = *flag.String("host", "", "hostname")
-var port = *flag.Int("port", 443, "port")
-var network_config = *flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
-var chunk_size = *flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
+var username = flag.String("user", current_user.Username, "username")
+var hostname = flag.String("host", "", "hostname")
+var port = flag.Int("port", 443, "port")
+var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
+var chunk_size = flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
 
 var type_store tlj.TypeStore
 
@@ -47,7 +47,7 @@ func commandLoop(control tlj.Client, workers []tlj.StreamWriter, chunk_size int)
 			// get updates from server?
 		} else if command == "put" {
 			file_list, total_bytes := imux.ParseFileList(args)
-			imux.UploadFiles(file_list, total_bytes, workers)
+			imux.UploadFiles(file_list, total_bytes, workers, chunk_size)
 		} else if command == "exit" {
 			control.Request(imux.Command{
 				Command: "exit",
@@ -79,27 +79,23 @@ func commandLoop(control tlj.Client, workers []tlj.StreamWriter, chunk_size int)
 func main() {
 	flag.Parse()
 
-	networks, err := imux.ParseNetworks(network_config)
+	networks := imux.ParseNetworks(*network_config)
+	client, err := imux.CreateClient(*hostname, *port)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	client, err := imux.CreateClient(hostname, port)
+	nonce := imux.ClientLogin(*username, client)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	nonce := imux.ClientLogin(username, client)
+	streamers, err := imux.ConnectWorkers(*hostname, *port, networks, nonce)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	streamers, err := imux.ConnectWorkers(hostname, port, networks, nonce)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	go commandLoop(client, streamers, chunk_size)
+	go commandLoop(client, streamers, *chunk_size)
 	err = <-client.Dead
 	fmt.Println("control connection closed:", err)
 }

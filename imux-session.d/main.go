@@ -166,7 +166,8 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 		"peer",
 		reflect.TypeOf(imux.TransferChunk{}),
 		func(iface interface{}, _ tlj.TLJContext) {
-			if _, ok := iface.(*imux.TransferChunk); ok {
+			if chunk, ok := iface.(*imux.TransferChunk); ok {
+				fmt.Println("chunk seen in session", chunk.Destination)
 				// if buffers[chunk.Destination] == nil {
 				// 	assign buffer to a new buffer
 				//}

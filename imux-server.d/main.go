@@ -10,18 +10,21 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"os/user"
 	"reflect"
+	"runtime/pprof"
 	"strconv"
 	"syscall"
 	"time"
 )
 
-var listen = *flag.String("listen", "0.0.0.0", "address to listen on")
-var port = *flag.Int("port", 443, "port to listen on")
-var daemon = *flag.Bool("daemon", false, "run the server in the background")
-var cert = *flag.String("cert", "cert.pem", "pem file with certificate to present")
-var key = *flag.String("key", "key.pem", "pem file with key for certificate")
+var listen = flag.String("listen", "0.0.0.0", "address to listen on")
+var port = flag.Int("port", 443, "port to listen on")
+var daemon = flag.Bool("daemon", false, "run the server in the background")
+var cert = flag.String("cert", "cert.pem", "pem file with certificate to present")
+var key = flag.String("key", "key.pem", "pem file with key for certificate")
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 var user_clients = make(map[string]tlj.Client)
 var good_nonce = make(map[string]string)
@@ -97,15 +100,17 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 		},
 	)
 
-	server.AcceptRequest(
+	server.Accept(
 		"all",
 		reflect.TypeOf(imux.WorkerAuth{}),
 		func(iface interface{}, context tlj.TLJContext) {
 			if worker_ready, ok := iface.(*imux.WorkerAuth); ok {
 				if _, ok := good_nonce[worker_ready.Nonce]; ok {
-					// tag as a worker and with nonce
-					//:server.Tags[context.Socket] = append(server.Tags[context.Socket], worker_ready.Nonce)
-					//server.Sockets[worker_ready.Nonce] = append(server.Sockets[worker_ready.Nonce], context.Socket)
+					server.TagSocket(context.Socket, "worker")
+					server.TagSocket(context.Socket, worker_ready.Nonce)
+					if username, ok := good_nonce[worker_ready.Nonce]; ok {
+						server.TagSocket(context.Socket, "user:"+username)
+					}
 				}
 			}
 		},
@@ -130,13 +135,6 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 							context.Respond(message)
 						}
 					})
-					// if command.Command == "get" {
-					//	req.OnResponse(reflect.TypeOf(TransferChunk{}), func(iface interface{}) {
-					//		if chunk, cast := iface.(*TransferChunk); cast {
-					//			chunk_distributor[nonce] <- chunk  // chunks come from session IPC out worker sockets
-					//		}
-					//	})
-					//}
 				}
 			}
 		},
@@ -161,10 +159,28 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 func main() {
 	flag.Parse()
 
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
+		<-c
+		pprof.StopCPUProfile()
+		os.Exit(1)
+	}()
+
 	if current_user, _ := user.Current(); current_user.Uid != "0" {
 		log.Fatal("Server must run as root.")
 	}
-	log_file, err := os.OpenFile("/var/log/multiplexity.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+
+	log_file, err := os.OpenFile("/var/log/imux.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		log.Fatal("can't open log")
 	}
@@ -172,15 +188,15 @@ func main() {
 	log.SetOutput(log_file)
 	log.Println("starting imux server")
 
-	config := imux.PrepareTLSConfig(cert, key)
-	address := fmt.Sprintf("%s:%d", listen, port)
+	config := imux.PrepareTLSConfig(*cert, *key)
+	address := fmt.Sprintf("%s:%d", *listen, *port)
 	listener, err := tls.Listen("tcp", address, &config)
 	if err != nil {
-		log.Fatal("error starting server: %s", err)
+		log.Fatal("error starting server:", err)
 	}
 
 	server := NewTLJServer(listener)
-	if daemon {
+	if *daemon {
 		// Daemonize
 	}
 	err = <-server.FailedServer
