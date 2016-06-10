@@ -15,7 +15,7 @@ Usage
 
 Start a server
 ```
-imux[M#Ø
+imux
 ```
 
 Connect
