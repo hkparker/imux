@@ -1,4 +1,4 @@
-package imux
+package common
 
 import (
 	"fmt"
@@ -11,8 +11,7 @@ import (
 )
 
 func TagSocketAll(socket net.Conn, server *tlj.Server) {
-	server.Tags[socket] = append(server.Tags[socket], "all")
-	server.Sockets["all"] = append(server.Sockets["all"], socket)
+	server.TagSocket(socket, "all")
 }
 
 func ParseFileList(items []string) ([]string, int) {

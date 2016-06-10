@@ -1,11 +1,12 @@
-package main
+package session
 
 import (
 	"fmt"
 	"github.com/dustin/go-humanize"
 	"github.com/hkparker/TLJ"
-	"github.com/hkparker/imux"
+	"github.com/hkparker/imux/lib/common"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"os/user"
@@ -133,13 +134,13 @@ func DisplayHelp(_ []string) string {
 }
 
 func NewTLJServer(listener net.Listener) tlj.Server {
-	type_store := imux.BuildTypeStore()
-	server := tlj.NewServer(listener, imux.TagSocketAll, type_store)
+	type_store := common.BuildTypeStore()
+	server := tlj.NewServer(listener, common.TagSocketAll, type_store)
 	server.AcceptRequest(
 		"peer",
-		reflect.TypeOf(imux.Command{}),
+		reflect.TypeOf(common.Command{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if command, ok := iface.(*imux.Command); ok {
+			if command, ok := iface.(*common.Command); ok {
 				if command.Command == "exit" {
 					os.Exit(0)
 				} else if command.Command == "get" {
@@ -149,11 +150,11 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 					// send the requested files down the responder as chunks
 				} else {
 					if function, present := commands[command.Command]; present {
-						context.Respond(imux.Message{
+						context.Respond(common.Message{
 							String: function(command.Args),
 						})
 					} else {
-						context.Respond(imux.Message{
+						context.Respond(common.Message{
 							String: "command not supported, try \"help\"",
 						})
 					}
@@ -164,39 +165,19 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 
 	server.Accept(
 		"peer",
-		reflect.TypeOf(imux.TransferChunk{}),
+		reflect.TypeOf(common.TransferChunk{}),
 		func(iface interface{}, _ tlj.TLJContext) {
-			if chunk, ok := iface.(*imux.TransferChunk); ok {
-				fmt.Println("chunk seen in session", chunk.Destination)
+			if chunk, ok := iface.(*common.TransferChunk); ok {
+				log.Println("chunk seen in session", chunk.Destination)
 				// if buffers[chunk.Destination] == nil {
 				// 	assign buffer to a new buffer
 				//}
 				//buffer.Insert(chunk)
-				//if buffer.LastWrite == file size {
+				//if buffer.LastWrite == file size (sync controller call to declare first?) {
 				// 	close the buffer
 				//}
 			}
 		},
 	)
 	return server
-}
-
-func main() {
-	ipc_file := os.Args[1]
-	control_socket, err := net.Dial("unix", ipc_file)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	discard_listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	server := NewTLJServer(discard_listener)
-	server.Insert(control_socket)
-	server.TagSocket(control_socket, "peer")
-	err = <-server.FailedServer
-	fmt.Println(err)
 }

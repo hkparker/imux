@@ -1,30 +1,19 @@
-package main
+package server
 
 import (
-	"crypto/tls"
-	"flag"
 	"fmt"
 	"github.com/hkparker/TLJ"
-	"github.com/hkparker/imux"
+	"github.com/hkparker/imux/lib/common"
 	"log"
 	"net"
 	"os"
 	"os/exec"
-	"os/signal"
 	"os/user"
 	"reflect"
-	"runtime/pprof"
 	"strconv"
 	"syscall"
 	"time"
 )
-
-var listen = flag.String("listen", "0.0.0.0", "address to listen on")
-var port = flag.Int("port", 443, "port to listen on")
-var daemon = flag.Bool("daemon", false, "run the server in the background")
-var cert = flag.String("cert", "cert.pem", "pem file with certificate to present")
-var key = flag.String("key", "key.pem", "pem file with key for certificate")
-var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 var user_clients = make(map[string]tlj.Client)
 var good_nonce = make(map[string]string)
@@ -53,14 +42,14 @@ func ForkUserProc(nonce, username string) {
 			fmt.Println(err)
 			return
 		}
-		type_store := imux.BuildTypeStore()
+		type_store := common.BuildTypeStore()
 		client := tlj.NewClient(control_socket, type_store, false)
 		user_clients[username] = client
 		client_created <- true
 	}()
 
 	<-listening
-	cmd := exec.Command("./imux-session", ipc_filename)
+	cmd := exec.Command("imux", fmt.Sprintf("--session=%s", ipc_filename))
 	cmd.SysProcAttr = &syscall.SysProcAttr{}
 	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
 	cmd.Stdout = os.Stdout
@@ -69,15 +58,15 @@ func ForkUserProc(nonce, username string) {
 }
 
 func NewTLJServer(listener net.Listener) tlj.Server {
-	type_store := imux.BuildTypeStore()
-	server := tlj.NewServer(listener, imux.TagSocketAll, type_store)
+	type_store := common.BuildTypeStore()
+	server := tlj.NewServer(listener, common.TagSocketAll, type_store)
 	server.AcceptRequest(
 		"all",
-		reflect.TypeOf(imux.AuthRequest{}),
+		reflect.TypeOf(common.AuthRequest{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if auth_request, ok := iface.(*imux.AuthRequest); ok {
-				if imux.Login(auth_request.Username, auth_request.Password) {
-					nonce, err := imux.NewNonce()
+			if auth_request, ok := iface.(*common.AuthRequest); ok {
+				if common.Login(auth_request.Username, auth_request.Password) {
+					nonce, err := common.NewNonce()
 					if err == nil {
 						server.Tags[context.Socket] = append(server.Tags[context.Socket], "control")
 						server.Sockets["control"] = append(server.Sockets["control"], context.Socket)
@@ -86,13 +75,13 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 						server.Sockets[user_tag] = append(server.Sockets[user_tag], context.Socket)
 						ForkUserProc(nonce, auth_request.Username)
 						good_nonce[nonce] = auth_request.Username
-						context.Respond(imux.Message{
+						context.Respond(common.Message{
 							String: nonce,
 						})
 					}
 				} else {
 					time.Sleep(3 * time.Second)
-					context.Respond(imux.Message{
+					context.Respond(common.Message{
 						String: "failed",
 					})
 				}
@@ -102,9 +91,9 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 
 	server.Accept(
 		"all",
-		reflect.TypeOf(imux.WorkerAuth{}),
+		reflect.TypeOf(common.WorkerAuth{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if worker_ready, ok := iface.(*imux.WorkerAuth); ok {
+			if worker_ready, ok := iface.(*common.WorkerAuth); ok {
 				if _, ok := good_nonce[worker_ready.Nonce]; ok {
 					server.TagSocket(context.Socket, "worker")
 					server.TagSocket(context.Socket, worker_ready.Nonce)
@@ -118,10 +107,10 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 
 	server.AcceptRequest(
 		"control",
-		reflect.TypeOf(imux.Command{}),
+		reflect.TypeOf(common.Command{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if command, ok := iface.(*imux.Command); ok {
-				username := imux.UsernameFromTags(server.Tags[context.Socket])
+			if command, ok := iface.(*common.Command); ok {
+				username := common.UsernameFromTags(server.Tags[context.Socket])
 				if client, ok := user_clients[username]; ok {
 					req, err := client.Request(command)
 					if err != nil {
@@ -130,8 +119,8 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 					if command.Command == "exit" {
 						delete(user_clients, username)
 					}
-					req.OnResponse(reflect.TypeOf(imux.Message{}), func(iface interface{}) {
-						if message, cast := iface.(*imux.Message); cast {
+					req.OnResponse(reflect.TypeOf(common.Message{}), func(iface interface{}) {
+						if message, cast := iface.(*common.Message); cast {
 							context.Respond(message)
 						}
 					})
@@ -142,10 +131,11 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 
 	server.Accept(
 		"worker",
-		reflect.TypeOf(imux.TransferChunk{}),
+		reflect.TypeOf(common.TransferChunk{}),
 		func(iface interface{}, context tlj.TLJContext) {
-			if chunk, ok := iface.(*imux.TransferChunk); ok {
-				username := imux.UsernameFromTags(server.Tags[context.Socket])
+			if chunk, ok := iface.(*common.TransferChunk); ok {
+				log.Println("chunk seen in server", chunk.Destination)
+				username := common.UsernameFromTags(server.Tags[context.Socket])
 				if client, ok := user_clients[username]; ok {
 					client.Message(chunk)
 				}
@@ -154,51 +144,4 @@ func NewTLJServer(listener net.Listener) tlj.Server {
 	)
 
 	return server
-}
-
-func main() {
-	flag.Parse()
-
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.StartCPUProfile(f)
-	}
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		<-c
-		pprof.StopCPUProfile()
-		os.Exit(1)
-	}()
-
-	if current_user, _ := user.Current(); current_user.Uid != "0" {
-		log.Fatal("Server must run as root.")
-	}
-
-	log_file, err := os.OpenFile("/var/log/imux.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-	if err != nil {
-		log.Fatal("can't open log")
-	}
-	defer log_file.Close()
-	log.SetOutput(log_file)
-	log.Println("starting imux server")
-
-	config := imux.PrepareTLSConfig(*cert, *key)
-	address := fmt.Sprintf("%s:%d", *listen, *port)
-	listener, err := tls.Listen("tcp", address, &config)
-	if err != nil {
-		log.Fatal("error starting server:", err)
-	}
-
-	server := NewTLJServer(listener)
-	if *daemon {
-		// Daemonize
-	}
-	err = <-server.FailedServer
-	log.Println("server closed: %s", err)
 }
