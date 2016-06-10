@@ -16,56 +16,49 @@ import (
 // Client flags
 var current_user, _ = user.Current()
 var username = flag.String("user", current_user.Username, "username")
-var hostname = flag.String("host", "", "imux server to start a session with")
-var port = flag.Int("port", 443, "port")
-var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string: <bind ip>:<count>;")
-var chunk_size = flag.Int("chunksize", 5*1024*1024, "size of each file chink in byte")
+var host = flag.String("host", "", "imux server to connect to") // host, port := common.ParseOptionalPort(hostname)
+var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string for clients: <bind ip>:<count>;")
+var chunk_size = flag.Int("chunk", 5*1024*1024, "size of each file chunk in bytes, specified by the client")
+var recycle_size = flag.Int("recycle", 0, "bytes transferred before client closes and replaces socket, default unlimited")
 
 // Server flags
-var listen = flag.String("bind", "0.0.0.0", "address to bind an imux server on")
-var daemon = flag.Bool("daemon", false, "run in the background, only used in server mode")
-var cert = flag.String("cert", "cert.pem", "pem file with certificate to present when in server mode") // ~/.imux/cert.pem
-var key = flag.String("key", "key.pem", "pem file with key for certificate presented in server mode")  // ~/.imux/key.pem
+var bind = flag.String("bind", "0.0.0.0:443", "address to bind an imux server on")
+var daemon = flag.Bool("daemon", false, "run the server in the background")
+var cert = flag.String("cert", "cert.pem", "pem file with certificate to present when in server mode, auto generated") // ~/.imux/cert.pem
+var key = flag.String("key", "key.pem", "pem file with key for certificate presented in server mode, auto generated")  // ~/.imux/key.pem
 
 //Session flags
-var ipc_file = flag.String("session", "", "unix socket used for IPC, set by server for user-context processes")
+var ipc_file = flag.String("session", "", "unix socket used for IPC, set by server for user context processes")
 
 func runClient() {
 	networks := common.ParseNetworks(*network_config)
-	tlj_client, err := common.CreateClient(*hostname, *port) // client
+	tlj_client, err := common.CreateClient(*host, 443) // client
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	nonce := common.ClientLogin(*username, tlj_client) // client
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	streamers, err := common.ConnectWorkers(*hostname, *port, networks, nonce) // client
+	streamers, err := common.ConnectWorkers(*host, 443, networks, nonce) // client
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	go client.CommandLoop(tlj_client, streamers, *chunk_size)
 	err = <-tlj_client.Dead
 	fmt.Println("control connection closed:", err)
 }
 
-func runSever() {
+func runServer() {
 	if current_user, _ := user.Current(); current_user.Uid != "0" {
 		log.Fatal("Server must run as root.")
 	}
-
 	log.Println("starting imux server")
-
 	config := common.PrepareTLSConfig(*cert, *key) // server
-	address := fmt.Sprintf("%s:%d", *listen, *port)
-	listener, err := tls.Listen("tcp", address, &config)
+	listener, err := tls.Listen("tcp", *bind, &config)
 	if err != nil {
 		log.Fatal("error starting server:", err)
 	}
-
 	server := server.NewTLJServer(listener)
 	if *daemon {
 		// Daemonize
@@ -80,7 +73,6 @@ func runSession() {
 		fmt.Println(err)
 		return
 	}
-
 	discard_listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		fmt.Println(err)
@@ -94,11 +86,12 @@ func runSession() {
 }
 
 func main() {
-	//flag.Parse()
-	// if session
-	// 	runSession()
-	// else if bind specified
-	//	runServer()
-	// else if host specified
-	//	runClient()
+	flag.Parse()
+	if *ipc_file != "" {
+		runSession()
+	} else if *host != "" {
+		runClient()
+	} else {
+		runServer()
+	}
 }
