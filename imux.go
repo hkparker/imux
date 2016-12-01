@@ -1,97 +1,58 @@
-package main
+package imux
 
 import (
-	"crypto/tls"
-	"flag"
-	"fmt"
-	"github.com/hkparker/imux/lib/client"
-	"github.com/hkparker/imux/lib/common"
-	"github.com/hkparker/imux/lib/server"
-	"github.com/hkparker/imux/lib/session"
-	"log"
+	log "github.com/Sirupsen/logrus"
 	"net"
-	"os/user"
 )
 
-// Client flags
-var current_user, _ = user.Current()
-var username = flag.String("user", current_user.Username, "username")
-var host = flag.String("host", "", "imux server to connect to") // host, port := common.ParseOptionalPort(hostname)
-var network_config = flag.String("networks", "0.0.0.0:200", "socket configuration string for clients: <bind ip>:<count>;")
-var chunk_size = flag.Int("chunk", 5*1024*1024, "size of each file chunk in bytes, specified by the client")
-var recycle_size = flag.Int("recycle", 0, "bytes transferred before client closes and replaces socket, default unlimited")
+// Provide a net.Listener, for which any accepted sockets will have their data
+// inverse multiplexed to the destination defined in the ConnectionPool.
+func OneToMany(listener net.Listener, destination ConnectionPool) error {
+	// In an infinite loop, accept new connections to this listener
+	// and chunk any data written to the accepted sockets into the
+	// destination ConnectionPool.
+	for {
+		socket, err := listener.Accept()
+		if err != nil {
+			log.WithFields(log.Fields{}).Error(err)
+			return err
+		}
+		socket_id := "" // generate an ID for this socket
 
-// Server flags
-var bind = flag.String("bind", "0.0.0.0:443", "address to bind an imux server on")
-var daemon = flag.Bool("daemon", false, "run the server in the background")
-var cert = flag.String("cert", "cert.pem", "pem file with certificate to present when in server mode, auto generated") // ~/.imux/cert.pem
-var key = flag.String("key", "key.pem", "pem file with key for certificate presented in server mode, auto generated")  // ~/.imux/key.pem
+		// Any chunks sent back from the destination into sockets
+		// in the connection pool need to be written to the correct
+		// socket.  Specify in this ConnectionPool that this newly
+		// created ID corresponds to this newly accepted socket.
+		destination.chunksBackTo(socket, socket_id)
 
-//Session flags
-var ipc_file = flag.String("session", "", "unix socket used for IPC, set by server for user context processes")
-
-func runClient() {
-	networks := common.ParseNetworks(*network_config)
-	tlj_client, err := common.CreateClient(*host, 443) // client
-	if err != nil {
-		log.Fatal(err)
+		// In an infinite loop in a goroutine, read data from the
+		// socket and send chunks to the destination ConnectionPool
+		go func(socket net.Conn, id string) {
+			sequence_number := 0
+			for {
+				chunk_data := make([]byte, destination.ChunkSize)
+				if _, err := socket.Read(chunk_data); err != nil {
+					destination.end(id)
+					log.WithFields(log.Fields{}).Info(err)
+					return
+				} else {
+					destination.chunks <- Chunk{
+						SocketID:   id,
+						SequenceID: sequence_number,
+						Data:       chunk_data,
+					}
+				}
+				sequence_number = sequence_number + 1
+			}
+		}(socket, socket_id)
 	}
-	nonce := common.ClientLogin(*username, tlj_client) // client
-	if err != nil {
-		log.Fatal(err)
-	}
-	streamers, err := common.ConnectWorkers(*host, 443, networks, nonce) // client
-	if err != nil {
-		log.Fatal(err)
-	}
-	go client.CommandLoop(tlj_client, streamers, *chunk_size)
-	err = <-tlj_client.Dead
-	fmt.Println("control connection closed:", err)
+	return nil
 }
 
-func runServer() {
-	if current_user, _ := user.Current(); current_user.Uid != "0" {
-		log.Fatal("Server must run as root.")
-	}
-	log.Println("starting imux server")
-	config := common.PrepareTLSConfig(*cert, *key) // server
-	listener, err := tls.Listen("tcp", *bind, &config)
-	if err != nil {
-		log.Fatal("error starting server:", err)
-	}
-	server := server.NewTLJServer(listener)
-	if *daemon {
-		// Daemonize
-	}
-	err = <-server.FailedServer
-	log.Println("server closed: %s", err)
-}
-
-func runSession() {
-	control_socket, err := net.Dial("unix", *ipc_file)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	discard_listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	server := session.NewTLJServer(discard_listener)
-	server.Insert(control_socket)
-	server.TagSocket(control_socket, "peer")
-	err = <-server.FailedServer
-	fmt.Println(err)
-}
-
-func main() {
-	flag.Parse()
-	if *ipc_file != "" {
-		runSession()
-	} else if *host != "" {
-		runClient()
-	} else {
-		runServer()
-	}
+func ManyToOne(listener net.Listener, destination string) {
+	// for each accepted ~socket~ uniquie chunk socket id
+	// create a new connection to destination
+	// read uuid from accepted socket?
+	// insert accepted socket into a tlj.Server that accepts chunks and streams them down the correct connection to destination
+	// take any responses on the new socket and chunk them back
 }
