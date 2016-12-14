@@ -2,8 +2,12 @@ package imux
 
 import (
 	log "github.com/Sirupsen/logrus"
+	"github.com/hkparker/TLJ"
 	"net"
+	"reflect"
 )
+
+var write_queues = make(map[string]WriteQueue)
 
 // Provide a net.Listener, for which any accepted sockets will have their data
 // inverse multiplexed to the destination defined in the ConnectionPool.
@@ -49,10 +53,18 @@ func OneToMany(listener net.Listener, destination ConnectionPool) error {
 	return nil
 }
 
+// Create a new TLJ server to accept chunks from anywhere
+// and order them, writing them to corresponding sockets.
 func ManyToOne(listener net.Listener, destination string) {
-	// for each accepted ~socket~ uniquie chunk socket id
-	// create a new connection to destination
-	// read uuid from accepted socket?
-	// insert accepted socket into a tlj.Server that accepts chunks and streams them down the correct connection to destination
-	// take any responses on the new socket and chunk them back
+	tlj_server := tlj.NewServer(listener, tag_socket, type_store())
+	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
+		if chunk, ok := iface.(*Chunk); ok {
+			queue, present := write_queues[chunk.SocketID]
+			if !present {
+				queue = OpenWriteQueue(destination)
+			}
+			queue.WriteChunk(chunk.SequenceID, chunk.Data)
+			log.WithFields(log.Fields{}).Info(chunk.SocketID)
+		}
+	})
 }

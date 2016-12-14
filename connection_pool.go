@@ -21,7 +21,7 @@ func NewConnectionPool(destination string, socket_count int, chunk_size int) Con
 }
 
 func (connection_pool *ConnectionPool) chunksBackTo(socket net.Conn, socket_id string) {
-
+	// add to map checked by tlj for correct place to accept response chunks
 }
 
 func (connection_pool *ConnectionPool) end(socket_id string) {
