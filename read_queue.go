@@ -4,10 +4,12 @@ import (
 	"net"
 )
 
-type ReadQueue struct{}
+type ReadQueue struct {
+	Input       net.Conn
+	Destination ConnectionPool
+}
 
-func Process(input net.Conn, destination ConnectionPool) ReadQueue {
-	return ReadQueue{}
+func (read_queue ReadQueue) process() {
 }
 
 func (read_queue *WriteQueue) end() {}
