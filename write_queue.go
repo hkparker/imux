@@ -1,9 +1,12 @@
 package imux
 
-type WriteQueue struct{}
+import (
+	"io"
+)
 
-func OpenWriteQueue(destination string) WriteQueue {
-	return WriteQueue{}
+type WriteQueue struct {
+	Destination io.Writer
+	Chunks      []Chunk
 }
 
-func (write_queue *WriteQueue) WriteChunk(sequence_id int, data []byte) {}
+func (write_queue *WriteQueue) Write(chunk Chunk) {}

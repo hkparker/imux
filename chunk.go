@@ -6,6 +6,7 @@ import (
 )
 
 type Chunk struct {
+	SessionID  string
 	SocketID   string
 	SequenceID int
 	Data       []byte
