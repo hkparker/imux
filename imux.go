@@ -9,48 +9,12 @@ import (
 )
 
 var WriteQueues = make(map[string]WriteQueue)
-var ClientChunkSize = 16384
-
-type Redailer func() (net.Conn, error)
-type IMUXConfig struct {
-	Transport string
-	Binds     map[string]int
-}
-type DataIMUX struct {
-	Chunks    chan Chunk
-	Stale     chan Chunk
-	SessionID string
-}
-
-func NewDataIMUX(session_id string) DataIMUX {
-	return DataIMUX{
-		Chunks:    make(chan Chunk, 10),
-		Stale:     make(chan Chunk, 50),
-		SessionID: session_id,
-	}
-}
-
-func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader) {
-	// determine the chunk size
-	var uint64 sequence = 1
-	for {
-		chunk_data := []byte(ClientChunkSize)
-		_, err := conn.Read(&chunk_data)
-		if err != nil {
-		}
-		data_imux.Chunks <- Chunk{
-			SequenceID: sequence,
-			SocketID:   id,
-			SessionID:  data_imux.SessionID,
-			Data:       chunk_data,
-		}
-		equence += 1
-	}
-}
+var responders = make(map[string]DataIMUX)
+var loopers = make(map[net.Conn]bool)
 
 // Provide a net.Listener, for which any accepted sockets will have their data
 // inverse multiplexed to
-func OneToMany(listener net.Listener, config IMUXConfig) error {
+func OneToMany(listener net.Listener, config IMUXConfig, redialer RedialerGenerator) error {
 	// Create a new SessionID shared by all sockets accepted by this OneToMany
 	session_id := "" //uuid4
 
@@ -58,11 +22,11 @@ func OneToMany(listener net.Listener, config IMUXConfig) error {
 	// chunk all data.  Create IMUXSockets to read chunks from the DataIMUX
 	// and write them to connections to the server.
 	imuxer := NewDataIMUX(session_id)
-	for _, count := range config.Binds {
+	for bind, count := range config.Binds {
 		for i := 0; i < count; i++ {
 			imux_socket := IMUXSocket{
 				IMUXer:   imuxer,
-				Redailer: new_redailer(),
+				Redialer: redialer(bind),
 			}
 			imux_socket.init()
 		}
@@ -85,7 +49,7 @@ func OneToMany(listener net.Listener, config IMUXConfig) error {
 			Destination: io.Writer(socket),
 		}
 
-		go imuxer.ReadFrom(socket_id, socket)
+		go imuxer.ReadFrom(socket_id, socket, "client")
 	}
 }
 
@@ -100,27 +64,32 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 			}
 			if _, looping := loopers[context.Socket]; !looping {
 				go func() {
-					writer := tlj.NewStreaWwriter(context.Socket, type_store(), reflect.TypeOf(Chunk{}))
+					writer, err := tlj.NewStreamWriter(context.Socket, type_store(), reflect.TypeOf(Chunk{}))
+					if err != nil {
+					}
 					for {
 						new_chunk := <-responders[chunk.SessionID].Chunks
-						err := writer.write(new_chunk)
+						err := writer.Write(new_chunk)
 						if err != nil {
 							responders[chunk.SessionID].Stale <- new_chunk
 							break
 						}
 					}
 				}()
+				loopers[context.Socket] = true
 			}
 			queue, present := WriteQueues[chunk.SocketID]
 			if !present {
-				destination, err := dial_destiation()
+				destination, err := dial_destination()
 				if err != nil {
 				}
 				queue = WriteQueue{
 					Destination: io.Writer(destination),
 				}
 				WriteQueues[chunk.SocketID] = queue
-				go responders[chunk.SessionID].ReadFrom(chunk.SocketID, destination)
+				if imuxer, ok := responders[chunk.SessionID]; ok {
+					imuxer.ReadFrom(chunk.SocketID, destination, "server")
+				}
 			}
 			queue.Write(chunk)
 		}
@@ -130,28 +99,4 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 	log.WithFields(log.Fields{
 		"error": err.Error(),
 	}).Error()
-}
-
-func new_redailer() Redailer {
-	return func() (net.Conn, error) {
-		// Dial new conn
-		// Create a TLJ server for this new conn that
-		// accepts return chunks, validates session, writes
-		// chunk into write queue for correct socket
-		return nil, nil
-	}
-}
-
-func tag_socket(socket net.Conn, server *tlj.Server) {
-	server.TagSocket(socket, "all")
-}
-
-func type_store() tlj.TypeStore {
-	type_store := tlj.NewTypeStore()
-	type_store.AddType(
-		reflect.TypeOf(Chunk{}),
-		reflect.TypeOf(&Chunk{}),
-		BuildChunk,
-	)
-	return type_store
 }

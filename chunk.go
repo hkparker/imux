@@ -8,7 +8,7 @@ import (
 type Chunk struct {
 	SessionID  string
 	SocketID   string
-	SequenceID int
+	SequenceID uint64
 	Data       []byte
 }
 

@@ -1,21 +1,24 @@
 package imux
 
 import (
-	"github.com/hkparker/tlj"
-	"io"
+	"github.com/hkparker/TLJ"
 	"reflect"
 	"time"
 )
 
 type IMUXSocket struct {
 	IMUXer   DataIMUX
-	Redailer Redailer
+	Redialer Redialer
 }
 
 func (imux_socket *IMUXSocket) init() {
 	for {
-		socket := imux_socket.Redailer()
-		writer := tlj.NewStreamWriter(socket, type_store(), reflect.TypeOf(Chunk{}))
+		socket, err := imux_socket.Redialer()
+		if err != nil {
+		}
+		writer, err := tlj.NewStreamWriter(socket, type_store(), reflect.TypeOf(Chunk{}))
+		if err != nil {
+		}
 		for {
 			chunk := <-imux_socket.IMUXer.Chunks
 			err := writer.Write(chunk)
