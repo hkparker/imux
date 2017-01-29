@@ -9,11 +9,43 @@ import (
 )
 
 var WriteQueues = make(map[string]WriteQueue)
+var ClientChunkSize = 16384
 
 type Redailer func() (net.Conn, error)
 type IMUXConfig struct {
 	Transport string
 	Binds     map[string]int
+}
+type DataIMUX struct {
+	Chunks    chan Chunk
+	Stale     chan Chunk
+	SessionID string
+}
+
+func NewDataIMUX(session_id string) DataIMUX {
+	return DataIMUX{
+		Chunks:    make(chan Chunk, 10),
+		Stale:     make(chan Chunk, 50),
+		SessionID: session_id,
+	}
+}
+
+func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader) {
+	// determine the chunk size
+	var uint64 sequence = 1
+	for {
+		chunk_data := []byte(ClientChunkSize)
+		_, err := conn.Read(&chunk_data)
+		if err != nil {
+		}
+		data_imux.Chunks <- Chunk{
+			SequenceID: sequence,
+			SocketID:   id,
+			SessionID:  data_imux.SessionID,
+			Data:       chunk_data,
+		}
+		equence += 1
+	}
 }
 
 // Provide a net.Listener, for which any accepted sockets will have their data
@@ -48,31 +80,47 @@ func OneToMany(listener net.Listener, config IMUXConfig) error {
 		socket_id := "" //uuid4
 
 		// Create a new WriteQueue addressed by the socket ID to
-		// take return chunks and write them into thi socket
+		// take return chunks and write them into this socket
 		WriteQueues[socket_id] = WriteQueue{
 			Destination: io.Writer(socket),
 		}
 
-		imuxer.ReadFrom(socket)
+		go imuxer.ReadFrom(socket_id, socket)
 	}
 }
 
 // Create a new TLJ server to accept chunks from anywhere
 // and order them, writing them to corresponding sockets.
-func ManyToOne(listener net.Listener, destination string) {
+func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error)) {
 	tlj_server := tlj.NewServer(listener, tag_socket, type_store())
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
 		if chunk, ok := iface.(Chunk); ok {
-			// if a response imuxer doesn't exist for this session ID
-			//   create a new response imuxer
-			// if the socket isn't looping chunks back
-			//   forever read from response imuxer for chunk's session and write data back
-			//   if errors writing data, give back to response imuser as stale
+			if _, present := responders[chunk.SessionID]; !present {
+				responders[chunk.SessionID] = NewDataIMUX(chunk.SessionID)
+			}
+			if _, looping := loopers[context.Socket]; !looping {
+				go func() {
+					writer := tlj.NewStreaWwriter(context.Socket, type_store(), reflect.TypeOf(Chunk{}))
+					for {
+						new_chunk := <-responders[chunk.SessionID].Chunks
+						err := writer.write(new_chunk)
+						if err != nil {
+							responders[chunk.SessionID].Stale <- new_chunk
+							break
+						}
+					}
+				}()
+			}
 			queue, present := WriteQueues[chunk.SocketID]
 			if !present {
-				// dial new outgoing socket
-				// response_imuxer for session id .ReadFrom(destination_socket)
-				// Create new WriteQueue addressed by SocketID
+				destination, err := dial_destiation()
+				if err != nil {
+				}
+				queue = WriteQueue{
+					Destination: io.Writer(destination),
+				}
+				WriteQueues[chunk.SocketID] = queue
+				go responders[chunk.SessionID].ReadFrom(chunk.SocketID, destination)
 			}
 			queue.Write(chunk)
 		}
@@ -92,4 +140,18 @@ func new_redailer() Redailer {
 		// chunk into write queue for correct socket
 		return nil, nil
 	}
+}
+
+func tag_socket(socket net.Conn, server *tlj.Server) {
+	server.TagSocket(socket, "all")
+}
+
+func type_store() tlj.TypeStore {
+	type_store := tlj.NewTypeStore()
+	type_store.AddType(
+		reflect.TypeOf(Chunk{}),
+		reflect.TypeOf(&Chunk{}),
+		BuildChunk,
+	)
+	return type_store
 }

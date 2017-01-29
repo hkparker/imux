@@ -6,6 +6,7 @@ import (
 
 type WriteQueue struct {
 	Destination io.Writer
+	TopSequence int
 	Chunks      []Chunk
 }
 
