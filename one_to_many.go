@@ -52,7 +52,7 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 				"at":         "OneToMany",
 				"session_id": session_id,
 				"error":      err.Error(),
-			}).Debug("error accepting new inbound connection to imux")
+			}).Error("error accepting new inbound connection to imux")
 			return err
 		}
 		socket_id := uuid.NewV4().String()
