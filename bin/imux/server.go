@@ -1,24 +1,37 @@
 package main
 
 import (
+	"crypto/tls"
+	log "github.com/Sirupsen/logrus"
 	"net"
 )
 
 // Create a new listener to accept transport imux sockets
 func createServerListener(listen string) net.Listener {
-	// Get the TLS certificate to present
-
-	// Create a TLS listener and return it
-	return nil
+	certificate := serverTLSCert(listen)
+	listener, err := tls.Listen(
+		"tls",
+		listen,
+		&tls.Config{
+			Certificates: []tls.Certificate{
+				certificate,
+			},
+		},
+	)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":    "createServerListener",
+			"bind":  listen,
+			"error": err.Error(),
+		}).Fatal("unable to start server listener")
+	}
+	return listener
 }
 
-// return a function that when called dials the specified address
+// Return a function that when called dials the specified address
 // and returns the new connection
 func createDestinationDialer(dial string) func() (net.Conn, error) {
 	return func() (net.Conn, error) {
-		// Parse the port and address
-
-		// Dial the address with a TCP socket
-		return nil, nil
+		return net.Dial("tcp", dial)
 	}
 }
