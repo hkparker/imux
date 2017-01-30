@@ -75,7 +75,7 @@ func createClientListener(listen string) net.Listener {
 func createRedailerGenerator(dial string) imux.RedialerGenerator {
 	return func(bind string) imux.Redialer {
 		return func() (net.Conn, error) {
-			bind_addr, err := net.ResolveTCPAddr("tcp", bind)
+			bind_addr, err := net.ResolveTCPAddr("tcp", bind+":0")
 			if err != nil {
 				log.WithFields(log.Fields{
 					"at":      "createRedialerGenerator",

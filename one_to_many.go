@@ -38,7 +38,7 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 				IMUXer:   imuxer,
 				Redialer: redialer_generator(bind),
 			}
-			imux_socket.init(session_id)
+			go imux_socket.init(session_id)
 		}
 	}
 

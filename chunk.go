@@ -32,5 +32,11 @@ func BuildChunk(data []byte, _ tlj.TLJContext) interface{} {
 		}).Error("error unmarshaling chunk data")
 		return nil
 	}
+	log.WithFields(log.Fields{
+		"at":          "BuildChunk",
+		"sequence_id": chunk.SequenceID,
+		"socket_id":   chunk.SocketID,
+		"session_id":  chunk.SessionID,
+	}).Debug("unmarshalled chunk data")
 	return chunk
 }

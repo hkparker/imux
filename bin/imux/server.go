@@ -10,7 +10,7 @@ import (
 func createServerListener(listen string) net.Listener {
 	certificate := serverTLSCert(listen)
 	listener, err := tls.Listen(
-		"tls",
+		"tcp",
 		listen,
 		&tls.Config{
 			Certificates: []tls.Certificate{

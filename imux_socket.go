@@ -113,7 +113,7 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 		}
 	}(tlj_server)
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
-		if chunk, ok := iface.(Chunk); ok {
+		if chunk, ok := iface.(*Chunk); ok {
 			CWQMux.Lock()
 			if writer, ok := client_write_queues[chunk.SocketID]; ok {
 				log.WithFields(log.Fields{

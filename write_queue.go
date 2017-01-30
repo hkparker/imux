@@ -10,11 +10,11 @@ import (
 type WriteQueue struct {
 	Destination io.Writer
 	LastDump    int
-	Queue       []Chunk
+	Queue       []*Chunk
 }
 
 // Accept a new chunk and dump any possible data
-func (write_queue *WriteQueue) Write(chunk Chunk) {
+func (write_queue *WriteQueue) Write(chunk *Chunk) {
 	log.WithFields(log.Fields{
 		"at":       "WriteQueue.Write",
 		"sequence": chunk.SequenceID,
@@ -26,7 +26,7 @@ func (write_queue *WriteQueue) Write(chunk Chunk) {
 }
 
 // Place a chunk in the correct location in the queue
-func (write_queue *WriteQueue) Insert(chunk Chunk) {
+func (write_queue *WriteQueue) Insert(chunk *Chunk) {
 	smaller := 0
 	for _, item := range write_queue.Queue {
 		if item.SequenceID < chunk.SequenceID {
@@ -35,7 +35,7 @@ func (write_queue *WriteQueue) Insert(chunk Chunk) {
 	}
 	smaller_chunks := write_queue.Queue[:smaller]
 	larger_chunks := write_queue.Queue[smaller:]
-	write_queue.Queue = append(smaller_chunks, append([]Chunk{chunk}, larger_chunks...)...)
+	write_queue.Queue = append(smaller_chunks, append([]*Chunk{chunk}, larger_chunks...)...)
 }
 
 // Dump as much chunk data out the Destination as available in order

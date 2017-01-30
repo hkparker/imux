@@ -26,7 +26,12 @@ var LoopersMux sync.Mutex
 func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error)) {
 	tlj_server := tlj.NewServer(listener, tag_socket, type_store())
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
-		if chunk, ok := iface.(Chunk); ok {
+		if chunk, ok := iface.(*Chunk); ok {
+			log.WithFields(log.Fields{
+				"sequence_id": chunk.SequenceID,
+				"socket_id":   chunk.SocketID,
+				"session_id":  chunk.SessionID,
+			}).Debug("received chunk")
 			createResponderIMUXIfNeeded(chunk.SessionID)
 			writeResponseChunksIfNeeded(context.Socket, chunk.SessionID)
 			updateSessionChunkSize(chunk.SessionID, len(chunk.Data))
