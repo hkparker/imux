@@ -25,11 +25,6 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "debug logging")
 	flag.Parse()
 	validateFlags()
-	if debug {
-		log.SetLevel(log.DebugLevel)
-	} else {
-		log.SetLevel(log.WarnLevel)
-	}
 
 	if server {
 		imux.ManyToOne(
@@ -41,6 +36,7 @@ func main() {
 		bind_map := make(map[string]int)
 		err := json.Unmarshal([]byte(binds), &bind_map)
 		if err != nil {
+			log.Fatal("invalid binds option")
 		}
 		TOFU(dial)
 		imux.OneToMany(
@@ -52,5 +48,14 @@ func main() {
 }
 
 func validateFlags() {
-
+	if client && server {
+		log.Fatal("cannot be in client and server mode at the same time")
+	} else if !client && !server {
+		log.Fatal("must be in client mode or server mode")
+	}
+	if debug {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.WarnLevel)
+	}
 }
