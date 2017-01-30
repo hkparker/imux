@@ -28,6 +28,7 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
 		if chunk, ok := iface.(*Chunk); ok {
 			log.WithFields(log.Fields{
+				"at":          "ManyToOne",
 				"sequence_id": chunk.SequenceID,
 				"socket_id":   chunk.SocketID,
 				"session_id":  chunk.SessionID,
@@ -39,13 +40,14 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 			if err == nil {
 				queue.Write(chunk)
 				log.WithFields(log.Fields{
-					"error":       err.Error(),
+					"at":          "ManyToOne",
 					"sequence_id": chunk.SequenceID,
 					"socket_id":   chunk.SocketID,
 					"session_id":  chunk.SessionID,
 				}).Debug("wrote chunk")
 			} else {
 				log.WithFields(log.Fields{
+					"at":          "ManyToOne",
 					"error":       err.Error(),
 					"sequence_id": chunk.SequenceID,
 					"socket_id":   chunk.SocketID,
@@ -172,7 +174,6 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 	}).Debug("checking if destination needs to be dialed and write queue created")
 	SWQMux.Lock()
 	queue, present := server_write_queues[socket_id]
-	SWQMux.Unlock()
 	if !present {
 		log.WithFields(log.Fields{
 			"at":         "queueForDestinationDialIfNeeded",
@@ -191,12 +192,10 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		queue = WriteQueue{
 			Destination: io.Writer(destination),
 		}
-		SWQMux.Lock()
 		server_write_queues[socket_id] = queue
-		SWQMux.Unlock()
 		RespondersMux.Lock()
 		if imuxer, ok := responders[session_id]; ok {
-			imuxer.ReadFrom(socket_id, destination, session_id, "server")
+			go imuxer.ReadFrom(socket_id, destination, session_id, "server")
 		} else {
 			log.WithFields(log.Fields{
 				"at":         "queueForDestinationDialIfNeeded",
@@ -206,5 +205,6 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		}
 		RespondersMux.Unlock()
 	}
+	SWQMux.Unlock()
 	return queue, nil
 }
