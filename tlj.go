@@ -1,12 +1,16 @@
 package imux
 
 import (
+	log "github.com/Sirupsen/logrus"
 	"github.com/hkparker/TLJ"
 	"net"
 	"reflect"
 )
 
 func tag_socket(socket net.Conn, server *tlj.Server) {
+	log.WithFields(log.Fields{
+		"at": "tag_socket",
+	}).Debug("tagging new socket")
 	server.TagSocket(socket, "all")
 }
 

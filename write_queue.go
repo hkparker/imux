@@ -1,6 +1,7 @@
 package imux
 
 import (
+	log "github.com/Sirupsen/logrus"
 	"io"
 )
 
@@ -11,6 +12,12 @@ type WriteQueue struct {
 }
 
 func (write_queue *WriteQueue) Write(chunk Chunk) {
+	log.WithFields(log.Fields{
+		"at":       "WriteQueue.Write",
+		"sequence": chunk.SequenceID,
+		"socket":   chunk.SocketID,
+		"session":  chunk.SessionID,
+	}).Debug("accepting new chunk")
 	write_queue.Insert(chunk)
 	write_queue.Dump()
 }
@@ -34,6 +41,12 @@ func (write_queue *WriteQueue) Dump() {
 		}
 		chunk := write_queue.Queue[0]
 		if chunk.SequenceID == uint64(write_queue.LastDump+1) {
+			log.WithFields(log.Fields{
+				"at":       "WriteQueue.Dump",
+				"sequence": chunk.SequenceID,
+				"socket":   chunk.SocketID,
+				"session":  chunk.SessionID,
+			}).Debug("writing out chunk data")
 			write_queue.Queue = write_queue.Queue[1:]
 			write_queue.Destination.Write(chunk.Data)
 			write_queue.LastDump = write_queue.LastDump + 1
