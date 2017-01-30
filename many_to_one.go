@@ -6,17 +6,21 @@ import (
 	"io"
 	"net"
 	"reflect"
+	"sync"
 )
 
 // WriteQueues for each outgoing socket on the server
 var server_write_queues = make(map[string]WriteQueue)
+var SWQMux sync.Mutex
 
 // DataIMUX objects to read responses from each outgoing destination socket
 var responders = make(map[string]DataIMUX)
+var RespondersMux sync.Mutex
 
 // Tracks if goroutines have been created for each socket to read from the
 // DataIMUXer for its session and write responses down
 var loopers = make(map[net.Conn]bool)
+var LoopersMux sync.Mutex
 
 // Create a new TLJ server to accept chunks from anywhere and order them, writing them to corresponding sockets
 func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error)) {
@@ -62,6 +66,7 @@ func createResponderIMUXIfNeeded(session_id string) {
 		"at":         "createResponderIMUXIfNeeded",
 		"session_id": session_id,
 	}).Debug("checking if responder data imux exists")
+	RespondersMux.Lock()
 	if _, present := responders[session_id]; !present {
 		responders[session_id] = NewDataIMUX(session_id)
 		log.WithFields(log.Fields{
@@ -69,6 +74,7 @@ func createResponderIMUXIfNeeded(session_id string) {
 			"session_id": session_id,
 		}).Debug("created new responder imux for session")
 	}
+	RespondersMux.Unlock()
 }
 
 // If it is not already happening, ensure that response chunks for a specified
@@ -78,6 +84,7 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 		"at":         "writeResponseChunksIfNeeded",
 		"session_id": session_id,
 	}).Debug("checking if socket needs chunk data written back down it")
+	LoopersMux.Lock()
 	if _, looping := loopers[socket]; !looping {
 		log.WithFields(log.Fields{
 			"at":         "writeResponseChunksIfNeeded",
@@ -93,8 +100,11 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 				}).Error("error create return stream writer")
 				return
 			}
+			RespondersMux.Lock()
+			chunk_stream := responders[session_id]
+			RespondersMux.Unlock()
 			for {
-				new_chunk := <-responders[session_id].Chunks
+				new_chunk := <-chunk_stream.Chunks
 				err := writer.Write(new_chunk)
 				if err != nil {
 					responders[session_id].Stale <- new_chunk
@@ -116,6 +126,7 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 		}()
 		loopers[socket] = true
 	}
+	LoopersMux.Unlock()
 }
 
 // Increase the server side chunk size for a session if a new largest chunk has been seen
@@ -125,6 +136,7 @@ func updateSessionChunkSize(session_id string, data_len int) {
 		"session_id": session_id,
 		"data_len":   data_len,
 	}).Debug("checking if chunk size is new session max")
+	OBCSMux.Lock()
 	if size, present := ObservedMaximumChunkSizes[session_id]; present {
 		if data_len > size {
 			log.WithFields(log.Fields{
@@ -142,6 +154,7 @@ func updateSessionChunkSize(session_id string, data_len int) {
 		}).Debug("setting chunk size for first time")
 		ObservedMaximumChunkSizes[session_id] = data_len
 	}
+	OBCSMux.Unlock()
 }
 
 // Get the queue a new chunk should go to, dialing the outgoing destination socket if this is the first time
@@ -152,7 +165,9 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		"session_id": session_id,
 		"socket_id":  socket_id,
 	}).Debug("checking if destination needs to be dialed and write queue created")
+	SWQMux.Lock()
 	queue, present := server_write_queues[socket_id]
+	SWQMux.Unlock()
 	if !present {
 		log.WithFields(log.Fields{
 			"at":         "queueForDestinationDialIfNeeded",
@@ -171,7 +186,10 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		queue = WriteQueue{
 			Destination: io.Writer(destination),
 		}
+		SWQMux.Lock()
 		server_write_queues[socket_id] = queue
+		SWQMux.Unlock()
+		RespondersMux.Lock()
 		if imuxer, ok := responders[session_id]; ok {
 			imuxer.ReadFrom(socket_id, destination, session_id, "server")
 		} else {
@@ -181,6 +199,7 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 				"socket_id":  socket_id,
 			}).Fatal("no responding reader exists, should not be possible")
 		}
+		RespondersMux.Unlock()
 	}
 	return queue, nil
 }

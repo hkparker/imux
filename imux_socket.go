@@ -11,6 +11,7 @@ import (
 
 // A map of all TLJ servers used to read chunks back from sessions
 var SessionResponsesTLJServers = make(map[string]tlj.Server)
+var SRTSMux sync.Mutex
 
 // A client socket that transports data in an imux session, autoreconnecting
 type IMUXSocket struct {
@@ -84,6 +85,7 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 		"at":         "imuxClientSocketTLJServer",
 		"session_id": session_id,
 	}).Debug("checking if new TLJ server needed for session")
+	SRTSMux.Lock()
 	if server, exists := SessionResponsesTLJServers[session_id]; exists {
 		log.WithFields(log.Fields{
 			"at":         "imuxClientSocketTLJServer",
@@ -91,6 +93,7 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 		}).Debug("returning existing TLJ server for session")
 		return server
 	}
+	SRTSMux.Unlock()
 	tlj_server := tlj.Server{
 		TypeStore:       type_store(),
 		Tag:             tag_socket,
@@ -111,13 +114,26 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 	}(tlj_server)
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
 		if chunk, ok := iface.(Chunk); ok {
+			CWQMux.Lock()
 			if writer, ok := client_write_queues[chunk.SocketID]; ok {
+				log.WithFields(log.Fields{
+					"at":         "imuxClientSocketTLJServer",
+					"session_id": session_id,
+				}).Debug("accepting response chunk in transport socket TLJ server")
 				writer.Write(chunk)
 			} else {
+				log.WithFields(log.Fields{
+					"at":         "imuxClientSocketTLJServer",
+					"session_id": session_id,
+					"socket_id":  chunk.SocketID,
+				}).Error("could not find write queue for response chunk")
 			}
+			CWQMux.Unlock()
 		}
 	})
+	SRTSMux.Lock()
 	SessionResponsesTLJServers[session_id] = tlj_server
+	SRTSMux.Unlock()
 	log.WithFields(log.Fields{
 		"at":         "imuxClientSocketTLJServer",
 		"session_id": session_id,

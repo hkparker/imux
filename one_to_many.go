@@ -5,10 +5,12 @@ import (
 	"github.com/satori/go.uuid"
 	"io"
 	"net"
+	"sync"
 )
 
 // Write Queues for all chunks coming back in response
 var client_write_queues = make(map[string]WriteQueue)
+var CWQMux sync.Mutex
 
 // Provide a net.Listener, for which any accepted sockets will have their data
 // inverse multiplexed to a corresponding socket on the server.
@@ -62,9 +64,11 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 
 		// Create a new WriteQueue addressed by the socket ID to
 		// take return chunks and write them into this socket
+		CWQMux.Lock()
 		client_write_queues[socket_id] = WriteQueue{
 			Destination: io.Writer(socket),
 		}
+		CWQMux.Unlock()
 
 		go imuxer.ReadFrom(socket_id, socket, session_id, "client")
 	}
