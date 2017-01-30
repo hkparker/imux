@@ -7,10 +7,11 @@ import (
 	"net"
 )
 
+// Write Queues for all chunks coming back in response
 var client_write_queues = make(map[string]WriteQueue)
 
 // Provide a net.Listener, for which any accepted sockets will have their data
-// inverse multiplexed to
+// inverse multiplexed to a corresponding socket on the server.
 func OneToMany(listener net.Listener, binds map[string]int, redialer_generator RedialerGenerator) error {
 	// Create a new SessionID shared by all sockets accepted by this OneToMany
 	session_id := uuid.NewV4().String()

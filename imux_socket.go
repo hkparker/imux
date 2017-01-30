@@ -9,13 +9,17 @@ import (
 	"time"
 )
 
+// A map of all TLJ servers used to read chunks back from sessions
 var SessionResponsesTLJServers = make(map[string]tlj.Server)
 
+// A client socket that transports data in an imux session, autoreconnecting
 type IMUXSocket struct {
 	IMUXer   DataIMUX
 	Redialer Redialer
 }
 
+// Dial a new connection in an imux session, creating a TLJ server for
+// responses if needed.  Read data from the sockets IMUXer and write it up.
 func (imux_socket *IMUXSocket) init(session_id string) {
 	log.WithFields(log.Fields{
 		"at": "IMUXSocket.init",
@@ -74,6 +78,7 @@ func (imux_socket *IMUXSocket) init(session_id string) {
 	}
 }
 
+// Create a TLJ server for a session if needed, or return the already existing server
 func imuxClientSocketTLJServer(session_id string) tlj.Server {
 	log.WithFields(log.Fields{
 		"at":         "imuxClientSocketTLJServer",

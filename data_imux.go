@@ -5,12 +5,16 @@ import (
 	"io"
 )
 
+// A DataIMUX will read data from multiple io.Readers and chunk the data
+// into a chunk chan.  The Stale attribute provides a way to insert chunks
+// back into the chan from external sources.
 type DataIMUX struct {
 	Chunks    chan Chunk
 	Stale     chan Chunk
 	SessionID string
 }
 
+// Create a new DataIMUX for a given session
 func NewDataIMUX(session_id string) DataIMUX {
 	log.WithFields(log.Fields{
 		"at":         "NewDataIMUX",
@@ -23,6 +27,8 @@ func NewDataIMUX(session_id string) DataIMUX {
 	}
 }
 
+// Read from a new data source in this DataIMUX, create chunks from it tagged with the
+// provided socket ID.
 func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string, chunk_size_mode string) {
 	log.WithFields(log.Fields{
 		"at":              "DataIMUX.ReadFrom",

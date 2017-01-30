@@ -5,12 +5,15 @@ import (
 	"io"
 )
 
+// A WriteQueue will receive chunks and order them, writing
+// their data out to the Destination in the correct order
 type WriteQueue struct {
 	Destination io.Writer
 	LastDump    int
 	Queue       []Chunk
 }
 
+// Accept a new chunk and dump any possible data
 func (write_queue *WriteQueue) Write(chunk Chunk) {
 	log.WithFields(log.Fields{
 		"at":       "WriteQueue.Write",
@@ -22,6 +25,7 @@ func (write_queue *WriteQueue) Write(chunk Chunk) {
 	write_queue.Dump()
 }
 
+// Place a chunk in the correct location in the queue
 func (write_queue *WriteQueue) Insert(chunk Chunk) {
 	smaller := 0
 	for _, item := range write_queue.Queue {
@@ -34,6 +38,7 @@ func (write_queue *WriteQueue) Insert(chunk Chunk) {
 	write_queue.Queue = append(smaller_chunks, append([]Chunk{chunk}, larger_chunks...)...)
 }
 
+// Dump as much chunk data out the Destination as available in order
 func (write_queue *WriteQueue) Dump() {
 	for {
 		if len(write_queue.Queue) == 0 {

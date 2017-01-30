@@ -7,6 +7,7 @@ import (
 	"reflect"
 )
 
+// Tag all TLJ sockets as "all"
 func tag_socket(socket net.Conn, server *tlj.Server) {
 	log.WithFields(log.Fields{
 		"at": "tag_socket",
@@ -14,6 +15,7 @@ func tag_socket(socket net.Conn, server *tlj.Server) {
 	server.TagSocket(socket, "all")
 }
 
+// Create a TLJ type store for only chunks
 func type_store() tlj.TypeStore {
 	type_store := tlj.NewTypeStore()
 	type_store.AddType(

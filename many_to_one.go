@@ -8,12 +8,17 @@ import (
 	"reflect"
 )
 
+// WriteQueues for each outgoing socket on the server
 var server_write_queues = make(map[string]WriteQueue)
+
+// DataIMUX objects to read responses from each outgoing destination socket
 var responders = make(map[string]DataIMUX)
+
+// Tracks if goroutines have been created for each socket to read from the
+// DataIMUXer for its session and write responses down
 var loopers = make(map[net.Conn]bool)
 
-// Create a new TLJ server to accept chunks from anywhere
-// and order them, writing them to corresponding sockets.
+// Create a new TLJ server to accept chunks from anywhere and order them, writing them to corresponding sockets
 func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error)) {
 	tlj_server := tlj.NewServer(listener, tag_socket, type_store())
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
@@ -50,6 +55,8 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 	}).Error("TLJ server failed for ManyToOne")
 }
 
+// If it does not exist, create a DataIMUX to read data from
+// outgoing destination sockets with a common session
 func createResponderIMUXIfNeeded(session_id string) {
 	log.WithFields(log.Fields{
 		"at":         "createResponderIMUXIfNeeded",
@@ -64,6 +71,8 @@ func createResponderIMUXIfNeeded(session_id string) {
 	}
 }
 
+// If it is not already happening, ensure that response chunks for a specified
+// session_id are written back down this socket.
 func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 	log.WithFields(log.Fields{
 		"at":         "writeResponseChunksIfNeeded",
@@ -109,6 +118,7 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 	}
 }
 
+// Increase the server side chunk size for a session if a new largest chunk has been seen
 func updateSessionChunkSize(session_id string, data_len int) {
 	log.WithFields(log.Fields{
 		"at":         "updateSessionChunkSize",
@@ -134,6 +144,8 @@ func updateSessionChunkSize(session_id string, data_len int) {
 	}
 }
 
+// Get the queue a new chunk should go to, dialing the outgoing destination socket if this is the first time
+// a socket ID has been observed.
 func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destination func() (net.Conn, error)) (WriteQueue, error) {
 	log.WithFields(log.Fields{
 		"at":         "queueForDestinationDialIfNeeded",
