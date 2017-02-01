@@ -20,9 +20,6 @@ type Chunk struct {
 
 // TLJ code to unpack Chunk data into an interface
 func BuildChunk(data []byte, _ tlj.TLJContext) interface{} {
-	log.WithFields(log.Fields{
-		"at": "BuildChunk",
-	}).Debug("unmarshaling chunk data")
 	chunk := &Chunk{}
 	err := json.Unmarshal(data, &chunk)
 	if err != nil {

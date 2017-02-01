@@ -120,7 +120,7 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 					"at":         "imuxClientSocketTLJServer",
 					"session_id": session_id,
 				}).Debug("accepting response chunk in transport socket TLJ server")
-				writer.Write(chunk)
+				writer.Chunks <- chunk
 			} else {
 				log.WithFields(log.Fields{
 					"at":         "imuxClientSocketTLJServer",

@@ -11,7 +11,7 @@ import (
 func tag_socket(socket net.Conn, server *tlj.Server) {
 	log.WithFields(log.Fields{
 		"at": "tag_socket",
-	}).Debug("tagging new socket")
+	}).Debug("accepted new socket")
 	server.TagSocket(socket, "all")
 }
 

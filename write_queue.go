@@ -10,19 +10,25 @@ import (
 type WriteQueue struct {
 	Destination io.Writer
 	LastDump    int
+	Chunks      chan *Chunk
 	Queue       []*Chunk
 }
 
-// Accept a new chunk and dump any possible data
-func (write_queue *WriteQueue) Write(chunk *Chunk) {
-	log.WithFields(log.Fields{
-		"at":       "WriteQueue.Write",
-		"sequence": chunk.SequenceID,
-		"socket":   chunk.SocketID,
-		"session":  chunk.SessionID,
-	}).Debug("accepting new chunk")
-	write_queue.Insert(chunk)
-	write_queue.Dump()
+func NewWriteQueue(destination io.Writer) *WriteQueue {
+	write_queue := WriteQueue{
+		Destination: destination,
+		Chunks:      make(chan *Chunk, 0),
+		Queue:       make([]*Chunk, 0),
+	}
+	go write_queue.process()
+	return &write_queue
+}
+
+func (write_queue *WriteQueue) process() {
+	for chunk := range write_queue.Chunks {
+		write_queue.Insert(chunk)
+		write_queue.Dump()
+	}
 }
 
 // Place a chunk in the correct location in the queue
@@ -53,7 +59,13 @@ func (write_queue *WriteQueue) Dump() {
 				"session":  chunk.SessionID,
 			}).Debug("writing out chunk data")
 			write_queue.Queue = write_queue.Queue[1:]
-			write_queue.Destination.Write(chunk.Data)
+			_, err := write_queue.Destination.Write(chunk.Data)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"at":    "WriteQueue.Dump",
+					"error": err.Error(),
+				}).Warn("error writing data out")
+			}
 			write_queue.LastDump = write_queue.LastDump + 1
 		} else {
 			break
