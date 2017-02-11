@@ -5,6 +5,8 @@ import (
 	"io"
 )
 
+var MaxChunkDataSize = 16384
+
 // A DataIMUX will read data from multiple io.Readers and chunk the data
 // into a chunk chan.  The Stale attribute provides a way to insert chunks
 // back into the chan from external sources.
@@ -37,13 +39,14 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string
 	}).Debug("reading from new data source")
 	sequence := uint64(1)
 	for {
-		chunk_data := make([]byte, GetChunkSize(chunk_size_mode, session_id))
+		chunk_data := make([]byte, MaxChunkDataSize)
 		read, err := conn.Read(chunk_data)
 		log.WithFields(log.Fields{
 			"at":        "DataIMUX.ReadFrom",
 			"socket_id": id,
 			"size":      read,
 		}).Debug("read data from data source")
+		chunk_data = chunk_data[:read]
 		if err != nil {
 			if err == io.EOF {
 				log.WithFields(log.Fields{
@@ -58,6 +61,7 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string
 					"socket_id": id,
 				}).Error("error reading data from imux data source")
 			}
+			// send a close socket
 			return
 		}
 		data_imux.Chunks <- Chunk{

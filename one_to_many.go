@@ -28,16 +28,18 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 	imuxer := NewDataIMUX(session_id)
 	for bind, count := range binds {
 		for i := 0; i < count; i++ {
-			log.WithFields(log.Fields{
-				"at":         "OneToMany",
-				"bind":       bind,
-				"session_id": session_id,
-			}).Debug("creating new imux socket")
-			imux_socket := IMUXSocket{
-				IMUXer:   imuxer,
-				Redialer: redialer_generator(bind),
-			}
-			go imux_socket.init(session_id)
+			go func(bind_addr string) {
+				log.WithFields(log.Fields{
+					"at":         "OneToMany",
+					"bind":       bind,
+					"session_id": session_id,
+				}).Debug("creating new imux socket")
+				imux_socket := IMUXSocket{
+					IMUXer:   imuxer,
+					Redialer: redialer_generator(bind_addr),
+				}
+				imux_socket.init(session_id)
+			}(bind)
 		}
 	}
 

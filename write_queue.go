@@ -65,6 +65,7 @@ func (write_queue *WriteQueue) Dump() {
 					"at":    "WriteQueue.Dump",
 					"error": err.Error(),
 				}).Warn("error writing data out")
+				// close the socket on the other side
 			}
 			write_queue.LastDump = write_queue.LastDump + 1
 		} else {

@@ -34,7 +34,6 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 			}).Debug("received chunk")
 			createResponderIMUXIfNeeded(chunk.SessionID)
 			writeResponseChunksIfNeeded(context.Socket, chunk.SessionID)
-			updateSessionChunkSize(chunk.SessionID, len(chunk.Data))
 			queue, err := queueForDestinationDialIfNeeded(chunk.SocketID, chunk.SessionID, dial_destination)
 			if err == nil {
 				queue.Chunks <- chunk
@@ -52,6 +51,7 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 					"socket_id":   chunk.SocketID,
 					"session_id":  chunk.SessionID,
 				}).Error("dropped chunk")
+				// respond with a close chunk
 			}
 		}
 	})
@@ -127,29 +127,6 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 	LoopersMux.Unlock()
 }
 
-// Increase the server side chunk size for a session if a new largest chunk has been seen
-func updateSessionChunkSize(session_id string, data_len int) {
-	OBCSMux.Lock()
-	if size, present := ObservedMaximumChunkSizes[session_id]; present {
-		if data_len > size {
-			log.WithFields(log.Fields{
-				"at":         "updateSessionChunkSize",
-				"session_id": session_id,
-				"data_len":   data_len,
-			}).Debug("updating chunk size")
-			ObservedMaximumChunkSizes[session_id] = data_len
-		}
-	} else {
-		log.WithFields(log.Fields{
-			"at":         "updateSessionChunkSize",
-			"session_id": session_id,
-			"data_len":   data_len,
-		}).Debug("setting chunk size for first time")
-		ObservedMaximumChunkSizes[session_id] = data_len
-	}
-	OBCSMux.Unlock()
-}
-
 // Get the queue a new chunk should go to, dialing the outgoing destination socket if this is the first time
 // a socket ID has been observed.
 func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destination func() (net.Conn, error)) (*WriteQueue, error) {
@@ -169,6 +146,7 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 				"socket_id":  socket_id,
 				"error":      err.Error(),
 			}).Error("error dialing destination")
+			return queue, err
 		}
 		queue = NewWriteQueue(destination)
 		server_write_queues[socket_id] = queue

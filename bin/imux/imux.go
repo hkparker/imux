@@ -32,17 +32,17 @@ func main() {
 			createDestinationDialer(dial),
 		)
 	} else if client {
-		imux.ClientChunkSize = chunk_size
+		imux.MaxChunkDataSize = chunk_size
 		bind_map := make(map[string]int)
 		err := json.Unmarshal([]byte(binds), &bind_map)
 		if err != nil {
 			log.Fatal("invalid binds option")
 		}
-		TOFU(dial)
+		good_cert := TOFU(dial)
 		imux.OneToMany(
 			createClientListener(listen),
 			bind_map,
-			createRedailerGenerator(dial),
+			createRedailerGenerator(dial, good_cert),
 		)
 	}
 }

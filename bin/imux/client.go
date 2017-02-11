@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/hkparker/imux"
 	"net"
 	"os"
+	"reflect"
 	"strings"
 )
 
@@ -18,7 +20,7 @@ import (
 // the presented certificate is safe and if it should be
 // saved in ~/.imux/known_hosts or if the connection
 // should be aborted.
-func TOFU(dial string) {
+func TOFU(dial string) *x509.Certificate {
 	known_hosts := LoadKnownHosts()
 	conn, err := tls.Dial(
 		"tcp",
@@ -55,6 +57,8 @@ func TOFU(dial string) {
 			AppendHost(dial, signature)
 		}
 	}
+
+	return conn.ConnectionState().PeerCertificates[0]
 }
 
 // Parse the listen address and return a TCP listsner
@@ -72,7 +76,7 @@ func createClientListener(listen string) net.Listener {
 
 // Create a function that accepts bind address and returns imux.Redialer
 // functions that bind to that address and dial the specified dial address
-func createRedailerGenerator(dial string) imux.RedialerGenerator {
+func createRedailerGenerator(dial string, cert *x509.Certificate) imux.RedialerGenerator {
 	return func(bind string) imux.Redialer {
 		return func() (net.Conn, error) {
 			bind_addr, err := net.ResolveTCPAddr("tcp", bind+":0")
@@ -83,7 +87,7 @@ func createRedailerGenerator(dial string) imux.RedialerGenerator {
 					"error":   err.Error(),
 				}).Error("error parsing bind address")
 			}
-			return tls.DialWithDialer(
+			conn, err := tls.DialWithDialer(
 				&net.Dialer{
 					LocalAddr: bind_addr,
 				},
@@ -91,6 +95,12 @@ func createRedailerGenerator(dial string) imux.RedialerGenerator {
 				dial,
 				&tls.Config{InsecureSkipVerify: true},
 			)
+			if err != nil {
+			}
+			if !reflect.DeepEqual(cert.Signature, conn.ConnectionState().PeerCertificates[0].Signature) {
+				log.Error("holy shit")
+			}
+			return conn, err
 		}
 	}
 }
