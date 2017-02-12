@@ -59,7 +59,7 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string
 					"at":        "DataIMUX.ReadFrom",
 					"error":     err.Error(),
 					"socket_id": id,
-				}).Error("error reading data from imux data source")
+				}).Debug("error reading data from imux data source")
 			}
 			close = true
 		}

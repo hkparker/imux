@@ -68,7 +68,12 @@ func (write_queue *WriteQueue) dump() {
 					"data_len": len(chunk.Data),
 				}).Debug("close chunk")
 				write_queue.destination.Close()
-				// remove all references to write queue and socket via chunk values
+				swqMux.Lock()
+				delete(server_write_queues, chunk.SocketID)
+				swqMux.Unlock()
+				cwqMux.Lock()
+				delete(client_write_queues, chunk.SocketID)
+				cwqMux.Unlock()
 				return
 			}
 			if err != nil {
