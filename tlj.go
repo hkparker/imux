@@ -25,15 +25,3 @@ func type_store() tlj.TypeStore {
 	)
 	return type_store
 }
-
-func remoteClose(socket_id, session_id string) {
-	log.WithFields(log.Fields{
-		"at":         "remoteClose",
-		"socket_id":  socket_id,
-		"session_id": session_id,
-	}).Debug("issuing remote close")
-	// Create a new SocketCloser, or chunk with Close set
-	// Determine how to send this struct to the correct Session
-	// remove all references to socket and write queue for socket
-	// ensure future chunks are blackholed
-}

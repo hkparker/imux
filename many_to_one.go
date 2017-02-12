@@ -8,6 +8,9 @@ import (
 	"sync"
 )
 
+// Chan of failures to write to destinations
+var FailedSocketOuts = make(map[string]chan bool)
+
 // WriteQueues for each outgoing socket on the server
 var server_write_queues = make(map[string]*WriteQueue)
 var swqMux sync.Mutex
@@ -32,6 +35,7 @@ func ManyToOne(listener net.Listener, dial_destination Redialer) {
 				"socket_id":   chunk.SocketID,
 				"session_id":  chunk.SessionID,
 			}).Debug("received chunk")
+			createFailReporterIfNeeded(chunk.SocketID, chunk.SessionID)
 			createResponderIMUXIfNeeded(chunk.SessionID)
 			writeResponseChunksIfNeeded(context.Socket, chunk.SessionID)
 			queue, err := queueForDestinationDialIfNeeded(chunk.SocketID, chunk.SessionID, dial_destination)
@@ -51,7 +55,14 @@ func ManyToOne(listener net.Listener, dial_destination Redialer) {
 					"socket_id":   chunk.SocketID,
 					"session_id":  chunk.SessionID,
 				}).Error("dropped chunk")
-				remoteClose(chunk.SocketID, chunk.SessionID)
+				if reporter, ok := FailedSocketOuts[chunk.SocketID]; ok {
+					reporter <- true
+				} else {
+					log.WithFields(log.Fields{
+						"at":        "ManyToOne",
+						"socket_id": chunk.SocketID,
+					}).Error("unable to lookup fail socket out channel")
+				}
 			}
 		}
 	})
@@ -63,6 +74,24 @@ func ManyToOne(listener net.Listener, dial_destination Redialer) {
 	log.WithFields(log.Fields{
 		"error": err.Error(),
 	}).Error("TLJ server failed for ManyToOne")
+}
+
+// Create a chan if needed to pass events about this socket failing
+func createFailReporterIfNeeded(socket_id, session_id string) {
+	if _, present := FailedSocketOuts[socket_id]; !present {
+		FailedSocketOuts[socket_id] = make(chan bool, 0)
+		go func() {
+			for {
+				<-FailedSocketOuts[socket_id]
+				responders[session_id].Chunks <- Chunk{
+					SessionID:  session_id,
+					SocketID:   socket_id,
+					SequenceID: 1,
+					Close:      true,
+				}
+			}
+		}()
+	}
 }
 
 // If it does not exist, create a DataIMUX to read data from

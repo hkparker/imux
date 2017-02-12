@@ -81,7 +81,14 @@ func (write_queue *WriteQueue) dump() {
 					"at":    "WriteQueue.Dump",
 					"error": err.Error(),
 				}).Warn("error writing data out")
-				remoteClose(chunk.SocketID, chunk.SessionID)
+				if reporter, ok := FailedSocketOuts[chunk.SocketID]; ok {
+					reporter <- true
+				} else {
+					log.WithFields(log.Fields{
+						"at":        "WriteQueue.dump",
+						"socket_id": chunk.SocketID,
+					}).Error("unable to lookup fail socket out channel")
+				}
 			}
 			write_queue.lastDump = write_queue.lastDump + 1
 		} else {
