@@ -68,6 +68,8 @@ func (write_queue *WriteQueue) dump() {
 					"data_len": len(chunk.Data),
 				}).Debug("close chunk")
 				write_queue.destination.Close()
+				// remove all references to write queue and socket via chunk values
+				return
 			}
 			if err != nil {
 				log.WithFields(log.Fields{

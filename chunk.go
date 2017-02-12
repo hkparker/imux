@@ -12,11 +12,11 @@ import (
 // while the socket ID specifies which socket a chunk should queue
 // into, ordered by the Sequence ID.
 type Chunk struct {
-	SessionID  string
-	SocketID   string
-	SequenceID uint64
-	Data       []byte
-	Close      bool
+	SessionID  string `json:"a"`
+	SocketID   string `json:"b"`
+	SequenceID uint64 `json:"c"`
+	Data       []byte `json:"d"`
+	Close      bool   `json:"e"`
 }
 
 // TLJ code to unpack Chunk data into an interface
