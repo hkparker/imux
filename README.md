@@ -2,7 +2,7 @@
 
 imux is a go library and corresponding command line tool for inverse multiplexing sockets
 
-![imux](https://cloud.hkparker.com/index.php/apps/files_sharing/ajax/publicpreview.php?x=2560&y=971&a=true&file=imux.png&t=QpoYNKvRQUL96ig&scalingup=0)
+![imux](http://i.imgur.com/xAJkwNr.png)
 
 An imux client will create a listener and forward data from any connections to that listener to an imux server, using a configurable number of sockets.  An imux server receives data and opens corresponding sockets to the final destination.  Encryption is done with self-signed TLS and Trust Of First Use (TOFU).
 

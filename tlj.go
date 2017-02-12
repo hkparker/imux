@@ -26,7 +26,7 @@ func type_store() tlj.TypeStore {
 	return type_store
 }
 
-func remoteClose(socket_id, session_id string) { // instant or after chunk n
+func remoteClose(socket_id, session_id string) {
 	log.WithFields(log.Fields{
 		"at":         "remoteClose",
 		"socket_id":  socket_id,
