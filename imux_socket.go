@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// A function that can be called by an IMUXSocket to reconnect after an error
+type Redialer func() (net.Conn, error)
+
+// A function that generates Redialers for specific bind addresses
+type RedialerGenerator func(string) Redialer
+
 // A map of all TLJ servers used to read chunks back from sessions
 var SessionResponsesTLJServers = make(map[string]tlj.Server)
 var SRTSMux sync.Mutex

@@ -34,7 +34,7 @@ ssh localhost
 
 imux can be used to transport a single socket over multiple internet connections using source routing in linux
 
-for example, consider simultaneously using two interfaces:
+For example, consider simultaneously using two interfaces:
 
 |Interface|Address|Default Gateway|
 |:-------:|:-----:|:-------------:|
