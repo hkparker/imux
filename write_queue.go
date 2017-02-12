@@ -8,13 +8,13 @@ import (
 // A WriteQueue will receive chunks and order them, writing
 // their data out to the Destination in the correct order
 type WriteQueue struct {
-	destination io.Writer
+	destination io.WriteCloser
 	lastDump    int
 	Chunks      chan *Chunk
 	queue       []*Chunk
 }
 
-func NewWriteQueue(destination io.Writer) *WriteQueue {
+func NewWriteQueue(destination io.WriteCloser) *WriteQueue {
 	write_queue := WriteQueue{
 		destination: destination,
 		Chunks:      make(chan *Chunk, 0),
@@ -60,6 +60,15 @@ func (write_queue *WriteQueue) dump() {
 			}).Debug("writing out chunk data")
 			write_queue.queue = write_queue.queue[1:]
 			_, err := write_queue.destination.Write(chunk.Data)
+			if chunk.Close {
+				log.WithFields(log.Fields{
+					"sequence": chunk.SequenceID,
+					"socket":   chunk.SocketID,
+					"session":  chunk.SessionID,
+					"data_len": len(chunk.Data),
+				}).Debug("close chunk")
+				write_queue.destination.Close()
+			}
 			if err != nil {
 				log.WithFields(log.Fields{
 					"at":    "WriteQueue.Dump",

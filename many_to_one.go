@@ -99,7 +99,14 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 				return
 			}
 			respondersMux.Lock()
-			chunk_stream := responders[session_id]
+			chunk_stream, ok := responders[session_id]
+			if !ok {
+				log.WithFields(log.Fields{
+					"at":         "writeResponseChunksIfNeeded",
+					"session_id": session_id,
+				}).Error("error looking up responder imux for session_id")
+				return
+			}
 			respondersMux.Unlock()
 			for {
 				new_chunk := <-chunk_stream.Chunks
@@ -152,10 +159,7 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		server_write_queues[socket_id] = queue
 		respondersMux.Lock()
 		if imuxer, ok := responders[session_id]; ok {
-			go func() {
-				imuxer.ReadFrom(socket_id, destination, session_id)
-				remoteClose(socket_id, session_id)
-			}()
+			go imuxer.ReadFrom(socket_id, destination, session_id)
 		} else {
 			log.WithFields(log.Fields{
 				"at":         "queueForDestinationDialIfNeeded",

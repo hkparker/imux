@@ -16,6 +16,7 @@ type Chunk struct {
 	SocketID   string
 	SequenceID uint64
 	Data       []byte
+	Close      bool
 }
 
 // TLJ code to unpack Chunk data into an interface

@@ -69,9 +69,6 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 		client_write_queues[socket_id] = NewWriteQueue(socket)
 		cwqMux.Unlock()
 
-		go func() {
-			imuxer.ReadFrom(socket_id, socket, session_id)
-			remoteClose(socket_id, session_id)
-		}()
+		go imuxer.ReadFrom(socket_id, socket, session_id)
 	}
 }

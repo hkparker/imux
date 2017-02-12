@@ -46,6 +46,7 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string
 			"size":      read,
 		}).Debug("read data from data source")
 		chunk_data = chunk_data[:read]
+		close := false
 		if err != nil {
 			if err == io.EOF {
 				log.WithFields(log.Fields{
@@ -60,13 +61,14 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string
 					"socket_id": id,
 				}).Error("error reading data from imux data source")
 			}
-			return
+			close = true
 		}
 		data_imux.Chunks <- Chunk{
 			SequenceID: sequence,
 			SocketID:   id,
 			SessionID:  data_imux.SessionID,
 			Data:       chunk_data,
+			Close:      close,
 		}
 		log.WithFields(log.Fields{
 			"at":        "DataIMUX.ReadFrom",
@@ -74,5 +76,8 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string
 			"size":      read,
 		}).Debug("write chunk from data source")
 		sequence += 1
+		if close {
+			return
+		}
 	}
 }
