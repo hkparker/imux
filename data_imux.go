@@ -61,7 +61,6 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string
 					"socket_id": id,
 				}).Error("error reading data from imux data source")
 			}
-			// send a close socket
 			return
 		}
 		data_imux.Chunks <- Chunk{

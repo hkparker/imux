@@ -51,7 +51,7 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 					"socket_id":   chunk.SocketID,
 					"session_id":  chunk.SessionID,
 				}).Error("dropped chunk")
-				// respond with a close chunk
+				remoteClose(chunk.SocketID, chunk.SessionID)
 			}
 		}
 	})
@@ -152,7 +152,10 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		server_write_queues[socket_id] = queue
 		RespondersMux.Lock()
 		if imuxer, ok := responders[session_id]; ok {
-			go imuxer.ReadFrom(socket_id, destination, session_id, "server")
+			go func() {
+				imuxer.ReadFrom(socket_id, destination, session_id, "server")
+				remoteClose(socket_id, session_id)
+			}()
 		} else {
 			log.WithFields(log.Fields{
 				"at":         "queueForDestinationDialIfNeeded",
