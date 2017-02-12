@@ -2,7 +2,7 @@
 
 This is a go library and corresponding command line tool for inverse multiplexing sockets.
 
-An imux client will create a listener and forward data from any connections to that listener to an imux server, using a configurable number of sockets.  An imux server receives data and opens corresponding sockets to the final destination.
+An imux client will create a listener and forward data from any connections to that listener to an imux server, using a configurable number of sockets.  An imux server receives data and opens corresponding sockets to the final destination.  imux uses TLS with Trust Of First Use (TOFU).
 
 ## example
 
@@ -24,7 +24,7 @@ Inverse multiplex over 10 sockets bound to any interface and connect to the serv
 imux -client --binds='{"0.0.0.0": 10}' --listen=localhost:22 --dial=server:443
 ```
 
-The client will use TLS with Trust Of First Use (TOFU).  Now on the client, connect to localhost:22 to ssh to the sever's localhost:22 over the imux connection
+Now on the client, connect to `localhost:22` to ssh to the sever's `localhost:22` over the imux connection
 
 ```
 ssh localhost
@@ -32,7 +32,7 @@ ssh localhost
 
 ## multiple routes
 
-imux can be used transport a single socket over multiple internet connections using source routing in linux.
+imux can be used to transport a single socket over multiple internet connections using source routing in linux.
 
 For example, consider simultaneously using two interfaces:
 
@@ -68,4 +68,10 @@ ip rule add from 10.0.0.2 table imux1
 ip route flush cache
 ```
 
+**connect with binds**
 
+Here we choose 20 sockets on each interface
+
+```
+imux -client --binds='{"192.168.1.2": 20, "10.0.0.2": 20}' --listen=localhost:22 --dial=server:443
+```
