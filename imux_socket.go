@@ -16,8 +16,8 @@ type Redialer func() (net.Conn, error)
 type RedialerGenerator func(string) Redialer
 
 // A map of all TLJ servers used to read chunks back from sessions
-var SessionResponsesTLJServers = make(map[string]tlj.Server)
-var SRTSMux sync.Mutex
+var sessionResponsesTLJServers = make(map[string]tlj.Server)
+var srtsMux sync.Mutex
 
 // A client socket that transports data in an imux session, autoreconnecting
 type IMUXSocket struct {
@@ -87,8 +87,8 @@ func (imux_socket *IMUXSocket) init(session_id string) {
 
 // Create a TLJ server for a session if needed, or return the already existing server
 func imuxClientSocketTLJServer(session_id string) tlj.Server {
-	SRTSMux.Lock()
-	if server, exists := SessionResponsesTLJServers[session_id]; exists {
+	srtsMux.Lock()
+	if server, exists := sessionResponsesTLJServers[session_id]; exists {
 		return server
 	}
 	tlj_server := tlj.Server{
@@ -111,7 +111,7 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 	}(tlj_server)
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
 		if chunk, ok := iface.(*Chunk); ok {
-			CWQMux.Lock()
+			cwqMux.Lock()
 			if writer, ok := client_write_queues[chunk.SocketID]; ok {
 				log.WithFields(log.Fields{
 					"at":         "imuxClientSocketTLJServer",
@@ -125,11 +125,11 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 					"socket_id":  chunk.SocketID,
 				}).Error("could not find write queue for response chunk")
 			}
-			CWQMux.Unlock()
+			cwqMux.Unlock()
 		}
 	})
-	SessionResponsesTLJServers[session_id] = tlj_server
-	SRTSMux.Unlock()
+	sessionResponsesTLJServers[session_id] = tlj_server
+	srtsMux.Unlock()
 	log.WithFields(log.Fields{
 		"at":         "imuxClientSocketTLJServer",
 		"session_id": session_id,

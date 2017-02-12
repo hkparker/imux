@@ -10,19 +10,19 @@ import (
 
 // WriteQueues for each outgoing socket on the server
 var server_write_queues = make(map[string]*WriteQueue)
-var SWQMux sync.Mutex
+var swqMux sync.Mutex
 
 // DataIMUX objects to read responses from each outgoing destination socket
 var responders = make(map[string]DataIMUX)
-var RespondersMux sync.Mutex
+var respondersMux sync.Mutex
 
 // Tracks if goroutines have been created for each socket to read from the
 // DataIMUXer for its session and write responses down
 var loopers = make(map[net.Conn]bool)
-var LoopersMux sync.Mutex
+var loopersMux sync.Mutex
 
 // Create a new TLJ server to accept chunks from anywhere and order them, writing them to corresponding sockets
-func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error)) {
+func ManyToOne(listener net.Listener, dial_destination Redialer) {
 	tlj_server := tlj.NewServer(listener, tag_socket, type_store())
 	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
 		if chunk, ok := iface.(*Chunk); ok {
@@ -68,7 +68,7 @@ func ManyToOne(listener net.Listener, dial_destination func() (net.Conn, error))
 // If it does not exist, create a DataIMUX to read data from
 // outgoing destination sockets with a common session
 func createResponderIMUXIfNeeded(session_id string) {
-	RespondersMux.Lock()
+	respondersMux.Lock()
 	if _, present := responders[session_id]; !present {
 		responders[session_id] = NewDataIMUX(session_id)
 		log.WithFields(log.Fields{
@@ -76,13 +76,13 @@ func createResponderIMUXIfNeeded(session_id string) {
 			"session_id": session_id,
 		}).Debug("created new responder imux for session")
 	}
-	RespondersMux.Unlock()
+	respondersMux.Unlock()
 }
 
 // If it is not already happening, ensure that response chunks for a specified
 // session_id are written back down this socket.
 func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
-	LoopersMux.Lock()
+	loopersMux.Lock()
 	if _, looping := loopers[socket]; !looping {
 		log.WithFields(log.Fields{
 			"at":         "writeResponseChunksIfNeeded",
@@ -98,9 +98,9 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 				}).Error("error create return stream writer")
 				return
 			}
-			RespondersMux.Lock()
+			respondersMux.Lock()
 			chunk_stream := responders[session_id]
-			RespondersMux.Unlock()
+			respondersMux.Unlock()
 			for {
 				new_chunk := <-chunk_stream.Chunks
 				err := writer.Write(new_chunk)
@@ -124,13 +124,13 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 		}()
 		loopers[socket] = true
 	}
-	LoopersMux.Unlock()
+	loopersMux.Unlock()
 }
 
 // Get the queue a new chunk should go to, dialing the outgoing destination socket if this is the first time
 // a socket ID has been observed.
 func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destination func() (net.Conn, error)) (*WriteQueue, error) {
-	SWQMux.Lock()
+	swqMux.Lock()
 	queue, present := server_write_queues[socket_id]
 	if !present {
 		log.WithFields(log.Fields{
@@ -150,10 +150,10 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		}
 		queue = NewWriteQueue(destination)
 		server_write_queues[socket_id] = queue
-		RespondersMux.Lock()
+		respondersMux.Lock()
 		if imuxer, ok := responders[session_id]; ok {
 			go func() {
-				imuxer.ReadFrom(socket_id, destination, session_id, "server")
+				imuxer.ReadFrom(socket_id, destination, session_id)
 				remoteClose(socket_id, session_id)
 			}()
 		} else {
@@ -163,8 +163,8 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 				"socket_id":  socket_id,
 			}).Fatal("no responding reader exists, should not be possible")
 		}
-		RespondersMux.Unlock()
+		respondersMux.Unlock()
 	}
-	SWQMux.Unlock()
+	swqMux.Unlock()
 	return queue, nil
 }

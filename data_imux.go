@@ -31,11 +31,10 @@ func NewDataIMUX(session_id string) DataIMUX {
 
 // Read from a new data source in this DataIMUX, create chunks from it tagged with the
 // provided socket ID.
-func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string, chunk_size_mode string) {
+func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader, session_id string) {
 	log.WithFields(log.Fields{
-		"at":              "DataIMUX.ReadFrom",
-		"socket_id":       id,
-		"chunk_size_mode": chunk_size_mode,
+		"at":        "DataIMUX.ReadFrom",
+		"socket_id": id,
 	}).Debug("reading from new data source")
 	sequence := uint64(1)
 	for {

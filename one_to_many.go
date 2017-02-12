@@ -9,7 +9,7 @@ import (
 
 // Write Queues for all chunks coming back in response
 var client_write_queues = make(map[string]*WriteQueue)
-var CWQMux sync.Mutex
+var cwqMux sync.Mutex
 
 // Provide a net.Listener, for which any accepted sockets will have their data
 // inverse multiplexed to a corresponding socket on the server.
@@ -65,12 +65,12 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 
 		// Create a new WriteQueue addressed by the socket ID to
 		// take return chunks and write them into this socket
-		CWQMux.Lock()
+		cwqMux.Lock()
 		client_write_queues[socket_id] = NewWriteQueue(socket)
-		CWQMux.Unlock()
+		cwqMux.Unlock()
 
 		go func() {
-			imuxer.ReadFrom(socket_id, socket, session_id, "client")
+			imuxer.ReadFrom(socket_id, socket, session_id)
 			remoteClose(socket_id, session_id)
 		}()
 	}
