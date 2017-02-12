@@ -80,7 +80,7 @@ func ManyToOne(listener net.Listener, dial_destination Redialer) {
 func createFailReporterIfNeeded(socket_id, session_id string) {
 	if _, present := FailedSocketOuts[socket_id]; !present {
 		FailedSocketOuts[socket_id] = make(chan bool, 0)
-		go func() {
+		go func(socket_id, session_id string) {
 			for {
 				<-FailedSocketOuts[socket_id]
 				responders[session_id].Chunks <- Chunk{
@@ -90,7 +90,7 @@ func createFailReporterIfNeeded(socket_id, session_id string) {
 					Close:      true,
 				}
 			}
-		}()
+		}(socket_id, session_id)
 	}
 }
 

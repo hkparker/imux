@@ -126,11 +126,11 @@ func LoadKnownHosts() map[string]string {
 }
 
 func MitMWarning(new_signature, old_signature string) (bool, bool) {
-	fmt.Println(
+	fmt.Println(fmt.Sprintf(
 		"WARNING: Remote certificate has changed!!\nold: %s\nnew: %s",
 		old_signature,
 		new_signature,
-	)
+	))
 	fmt.Println("[A]bort, [C]ontinue without updating, [U]pdate and continue?")
 	connect := false
 	update := false
