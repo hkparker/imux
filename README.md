@@ -1,16 +1,16 @@
 # imux
 
-This is a go library and corresponding command line tool for inverse multiplexing sockets.
+imux is a go library and corresponding command line tool for inverse multiplexing sockets
 
-An imux client will create a listener and forward data from any connections to that listener to an imux server, using a configurable number of sockets.  An imux server receives data and opens corresponding sockets to the final destination.  imux uses TLS with Trust Of First Use (TOFU).
+An imux client will create a listener and forward data from any connections to that listener to an imux server, using a configurable number of sockets.  An imux server receives data and opens corresponding sockets to the final destination.  Encryption is done with self-signed TLS and Trust Of First Use (TOFU).
 
 ## example
 
-Let's say you wanted to expose an SSH server over imux.
+let's say you wanted to expose an SSH server over imux
 
 **server**
 
-Serve imux on `0.0.0.0:443` and connect out to `localhost:22`
+serve imux on `0.0.0.0:443` and connect out to `localhost:22`
 
 ```
 imux -server --listen=0.0.0.0:443 --dial=localhost:22
@@ -18,13 +18,13 @@ imux -server --listen=0.0.0.0:443 --dial=localhost:22
 
 **client**
 
-Inverse multiplex over 10 sockets bound to any interface and connect to the server
+inverse multiplex over 10 sockets bound to any interface and connect to the server
 
 ```
 imux -client --binds='{"0.0.0.0": 10}' --listen=localhost:22 --dial=server:443
 ```
 
-Now on the client, connect to `localhost:22` to ssh to the sever's `localhost:22` over the imux connection
+now on the client, connect to `localhost:22` to ssh to the sever's `localhost:22` over the imux connection
 
 ```
 ssh localhost
@@ -32,9 +32,9 @@ ssh localhost
 
 ## multiple routes
 
-imux can be used to transport a single socket over multiple internet connections using source routing in linux.
+imux can be used to transport a single socket over multiple internet connections using source routing in linux
 
-For example, consider simultaneously using two interfaces:
+for example, consider simultaneously using two interfaces:
 
 |Interface|Address|Default Gateway|
 |:-------:|:-----:|:-------------:|
@@ -70,7 +70,7 @@ ip route flush cache
 
 **connect with binds**
 
-Here we choose 20 sockets on each interface
+here we choose 20 sockets on each interface
 
 ```
 imux -client --binds='{"192.168.1.2": 20, "10.0.0.2": 20}' --listen=localhost:22 --dial=server:443
