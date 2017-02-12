@@ -17,11 +17,18 @@ import (
 
 // Load or generate a new self-signed TLS certificate
 func serverTLSCert(bind string) tls.Certificate {
-	crt_filename := os.Getenv("HOME") + "/.imux/server.crt"
-	key_filename := os.Getenv("HOME") + "/.imux/server.key"
+	config_home := os.Getenv("HOME") + "/.imux"
+	crt_filename := config_home + "/" + bind + ".crt"
+	key_filename := config_home + "/" + bind + ".key"
 	_, crt_err := os.Stat(crt_filename)
 	_, key_err := os.Stat(key_filename)
 	if os.IsNotExist(crt_err) || os.IsNotExist(key_err) {
+		// create config directory if needed
+		_, config_dir_err := os.Stat(config_home)
+		if config_dir_err != nil {
+			os.Mkdir(config_home, 0700)
+		}
+
 		// create new cert, write to files
 		cn, _, err := net.SplitHostPort(bind)
 		if err != nil {
