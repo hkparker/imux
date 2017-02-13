@@ -68,7 +68,25 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 		cwqMux.Lock()
 		client_write_queues[socket_id] = NewWriteQueue(socket)
 		cwqMux.Unlock()
+		createFailClientReporter(socket_id, session_id, imuxer)
 
 		go imuxer.ReadFrom(socket_id, socket, session_id)
+	}
+}
+
+func createFailClientReporter(socket_id, session_id string, mux DataIMUX) {
+	if _, present := FailedSocketOuts[socket_id]; !present {
+		FailedSocketOuts[socket_id] = make(chan bool, 0)
+		go func(socket_id, session_id string) {
+			for {
+				<-FailedSocketOuts[socket_id]
+				mux.Chunks <- Chunk{
+					SessionID:  session_id,
+					SocketID:   socket_id,
+					SequenceID: 0,
+					Close:      true,
+				}
+			}
+		}(socket_id, session_id)
 	}
 }
