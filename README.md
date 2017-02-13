@@ -6,6 +6,12 @@ imux is a go library and corresponding command line tool for inverse multiplexin
 
 An imux client will create a listener and forward data from any connections to that listener to an imux server, using a configurable number of sockets.  An imux server receives data and opens corresponding sockets to the final destination.  Encryption is done with self-signed TLS and Trust Of First Use (TOFU).
 
+## installation
+
+```
+go get github.com/hkparker/imux/...
+```
+
 ## example
 
 let's say you wanted to expose an SSH server over imux
