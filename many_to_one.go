@@ -86,7 +86,7 @@ func createFailReporterIfNeeded(socket_id, session_id string) {
 				responders[session_id].Chunks <- Chunk{
 					SessionID:  session_id,
 					SocketID:   socket_id,
-					SequenceID: 1,
+					SequenceID: 0,
 					Close:      true,
 				}
 			}

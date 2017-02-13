@@ -33,6 +33,14 @@ func (write_queue *WriteQueue) process() {
 
 // Place a chunk in the correct location in the queue
 func (write_queue *WriteQueue) insert(chunk *Chunk) {
+	if chunk.SequenceID == 0 {
+		log.WithFields(log.Fields{
+			"socket":  chunk.SocketID,
+			"session": chunk.SessionID,
+		}).Debug("reset chunk received")
+		write_queue.bail(chunk.SocketID)
+		return
+	}
 	smaller := 0
 	for _, item := range write_queue.queue {
 		if item.SequenceID < chunk.SequenceID {
@@ -67,13 +75,7 @@ func (write_queue *WriteQueue) dump() {
 					"session":  chunk.SessionID,
 					"data_len": len(chunk.Data),
 				}).Debug("close chunk")
-				write_queue.destination.Close()
-				swqMux.Lock()
-				delete(server_write_queues, chunk.SocketID)
-				swqMux.Unlock()
-				cwqMux.Lock()
-				delete(client_write_queues, chunk.SocketID)
-				cwqMux.Unlock()
+				write_queue.bail(chunk.SocketID)
 				return
 			}
 			if err != nil {
@@ -95,4 +97,15 @@ func (write_queue *WriteQueue) dump() {
 			break
 		}
 	}
+}
+
+func (write_queue *WriteQueue) bail(socket_id string) {
+	write_queue.destination.Close()
+	close(write_queue.Chunks)
+	swqMux.Lock()
+	delete(server_write_queues, socket_id)
+	swqMux.Unlock()
+	cwqMux.Lock()
+	delete(client_write_queues, socket_id)
+	cwqMux.Unlock()
 }
