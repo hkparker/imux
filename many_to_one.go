@@ -10,6 +10,7 @@ import (
 
 // Chan of failures to write to destinations
 var FailedSocketOuts = make(map[string]chan bool)
+var fsoMux sync.Mutex
 
 // WriteQueues for each outgoing socket on the server
 var server_write_queues = make(map[string]*WriteQueue)
@@ -78,6 +79,7 @@ func ManyToOne(listener net.Listener, dial_destination Redialer) {
 
 // Create a chan if needed to pass events about this socket failing
 func createFailReporterIfNeeded(socket_id, session_id string) {
+	fsoMux.Lock()
 	if _, present := FailedSocketOuts[socket_id]; !present {
 		FailedSocketOuts[socket_id] = make(chan bool, 0)
 		go func(socket_id, session_id string) {
@@ -92,6 +94,7 @@ func createFailReporterIfNeeded(socket_id, session_id string) {
 			}
 		}(socket_id, session_id)
 	}
+	fsoMux.Unlock()
 }
 
 // If it does not exist, create a DataIMUX to read data from
