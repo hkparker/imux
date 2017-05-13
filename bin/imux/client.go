@@ -114,6 +114,10 @@ func LoadKnownHosts() map[string]string {
 		os.Create(filename)
 		return sigs
 	}
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		os.Create(filename)
+		return sigs
+	}
 	known_hosts, err := os.Open(filename)
 	defer known_hosts.Close()
 	if err != nil {
