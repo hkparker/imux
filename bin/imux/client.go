@@ -107,8 +107,10 @@ func createRedailerGenerator(dial string, cert *x509.Certificate) imux.RedialerG
 
 func LoadKnownHosts() map[string]string {
 	sigs := make(map[string]string)
-	filename := os.Getenv("HOME") + "/.imux/known_hosts"
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
+	path := os.Getenv("HOME") + "/.imux/"
+	filename := path + "known_hosts"
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.MkdirAll(path, 0755)
 		os.Create(filename)
 		return sigs
 	}
