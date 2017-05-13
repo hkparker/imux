@@ -88,6 +88,7 @@ func (imux_socket *IMUXSocket) init(session_id string) {
 // Create a TLJ server for a session if needed, or return the already existing server
 func imuxClientSocketTLJServer(session_id string) tlj.Server {
 	srtsMux.Lock()
+	defer srtsMux.Unlock()
 	if server, exists := sessionResponsesTLJServers[session_id]; exists {
 		return server
 	}
@@ -129,7 +130,6 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 		}
 	})
 	sessionResponsesTLJServers[session_id] = tlj_server
-	srtsMux.Unlock()
 	log.WithFields(log.Fields{
 		"at":         "imuxClientSocketTLJServer",
 		"session_id": session_id,
