@@ -101,7 +101,6 @@ func (write_queue *WriteQueue) dump() {
 
 func (write_queue *WriteQueue) bail(socket_id string) {
 	write_queue.destination.Close()
-	close(write_queue.Chunks)
 	swqMux.Lock()
 	delete(server_write_queues, socket_id)
 	swqMux.Unlock()
