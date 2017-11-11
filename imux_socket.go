@@ -2,7 +2,7 @@ package imux
 
 import (
 	log "github.com/Sirupsen/logrus"
-	"github.com/hkparker/TLJ"
+	"github.com/hkparker/TLB"
 	"net"
 	"reflect"
 	"sync"
@@ -15,8 +15,8 @@ type Redialer func() (net.Conn, error)
 // A function that generates Redialers for specific bind addresses
 type RedialerGenerator func(string) Redialer
 
-// A map of all TLJ servers used to read chunks back from sessions
-var sessionResponsesTLJServers = make(map[string]tlj.Server)
+// A map of all TLB servers used to read chunks back from sessions
+var sessionResponsesTLBServers = make(map[string]tlb.Server)
 var srtsMux sync.Mutex
 
 // A client socket that transports data in an imux session, autoreconnecting
@@ -25,13 +25,13 @@ type IMUXSocket struct {
 	Redialer Redialer
 }
 
-// Dial a new connection in an imux session, creating a TLJ server for
+// Dial a new connection in an imux session, creating a TLB server for
 // responses if needed.  Read data from the sockets IMUXer and write it up.
 func (imux_socket *IMUXSocket) init(session_id string) {
 	log.WithFields(log.Fields{
 		"at": "IMUXSocket.init",
 	}).Debug("starting imux socket")
-	tlj_server := imuxClientSocketTLJServer(session_id)
+	tlb_server := imuxClientSocketTLBServer(session_id)
 	cooldown := 10 * time.Second
 	for {
 		log.WithFields(log.Fields{
@@ -46,8 +46,8 @@ func (imux_socket *IMUXSocket) init(session_id string) {
 			time.Sleep(cooldown)
 			continue
 		}
-		tlj_server.Insert(socket)
-		writer, err := tlj.NewStreamWriter(socket, type_store(), reflect.TypeOf(Chunk{}))
+		tlb_server.Insert(socket)
+		writer, err := tlb.NewStreamWriter(socket, type_store(), reflect.TypeOf(Chunk{}))
 		if err != nil {
 			log.WithFields(log.Fields{
 				"at":    "IMUXSocket.init",
@@ -85,43 +85,43 @@ func (imux_socket *IMUXSocket) init(session_id string) {
 	}
 }
 
-// Create a TLJ server for a session if needed, or return the already existing server
-func imuxClientSocketTLJServer(session_id string) tlj.Server {
+// Create a TLB server for a session if needed, or return the already existing server
+func imuxClientSocketTLBServer(session_id string) tlb.Server {
 	srtsMux.Lock()
 	defer srtsMux.Unlock()
-	if server, exists := sessionResponsesTLJServers[session_id]; exists {
+	if server, exists := sessionResponsesTLBServers[session_id]; exists {
 		return server
 	}
-	tlj_server := tlj.Server{
+	tlb_server := tlb.Server{
 		TypeStore:       type_store(),
 		Tag:             tag_socket,
 		Tags:            make(map[net.Conn][]string),
 		Sockets:         make(map[string][]net.Conn),
-		Events:          make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
-		Requests:        make(map[string]map[uint16][]func(interface{}, tlj.TLJContext)),
+		Events:          make(map[string]map[uint16][]func(interface{}, tlb.TLBContext)),
+		Requests:        make(map[string]map[uint16][]func(interface{}, tlb.TLBContext)),
 		FailedServer:    make(chan error, 1),
 		FailedSockets:   make(chan net.Conn, 200),
 		TagManipulation: &sync.Mutex{},
 		InsertRequests:  &sync.Mutex{},
 		InsertEvents:    &sync.Mutex{},
 	}
-	go func(server tlj.Server) {
+	go func(server tlb.Server) {
 		for {
 			<-server.FailedSockets
 		}
-	}(tlj_server)
-	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
+	}(tlb_server)
+	tlb_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlb.TLBContext) {
 		if chunk, ok := iface.(*Chunk); ok {
 			cwqMux.Lock()
 			if writer, ok := client_write_queues[chunk.SocketID]; ok {
 				log.WithFields(log.Fields{
-					"at":         "imuxClientSocketTLJServer",
+					"at":         "imuxClientSocketTLBServer",
 					"session_id": session_id,
-				}).Debug("accepting response chunk in transport socket TLJ server")
+				}).Debug("accepting response chunk in transport socket TLB server")
 				writer.Chunks <- chunk
 			} else {
 				log.WithFields(log.Fields{
-					"at":         "imuxClientSocketTLJServer",
+					"at":         "imuxClientSocketTLBServer",
 					"session_id": session_id,
 					"socket_id":  chunk.SocketID,
 				}).Error("could not find write queue for response chunk")
@@ -129,10 +129,10 @@ func imuxClientSocketTLJServer(session_id string) tlj.Server {
 			cwqMux.Unlock()
 		}
 	})
-	sessionResponsesTLJServers[session_id] = tlj_server
+	sessionResponsesTLBServers[session_id] = tlb_server
 	log.WithFields(log.Fields{
-		"at":         "imuxClientSocketTLJServer",
+		"at":         "imuxClientSocketTLBServer",
 		"session_id": session_id,
-	}).Debug("created new TLJ server for session")
-	return tlj_server
+	}).Debug("created new TLB server for session")
+	return tlb_server
 }

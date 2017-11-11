@@ -3,7 +3,7 @@ package imux
 import (
 	"encoding/json"
 	log "github.com/Sirupsen/logrus"
-	"github.com/hkparker/TLJ"
+	"github.com/hkparker/TLB"
 )
 
 // A chunk represents a piece of information exchanged between a
@@ -19,8 +19,8 @@ type Chunk struct {
 	Close      bool   `json:"e"`
 }
 
-// TLJ code to unpack Chunk data into an interface
-func buildChunk(data []byte, _ tlj.TLJContext) interface{} {
+// TLB code to unpack Chunk data into an interface
+func buildChunk(data []byte, _ tlb.TLBContext) interface{} {
 	chunk := &Chunk{}
 	err := json.Unmarshal(data, &chunk)
 	if err != nil {

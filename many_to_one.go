@@ -2,7 +2,7 @@ package imux
 
 import (
 	log "github.com/Sirupsen/logrus"
-	"github.com/hkparker/TLJ"
+	"github.com/hkparker/TLB"
 	"net"
 	"reflect"
 	"sync"
@@ -25,10 +25,10 @@ var respondersMux sync.Mutex
 var loopers = make(map[net.Conn]bool)
 var loopersMux sync.Mutex
 
-// Create a new TLJ server to accept chunks from anywhere and order them, writing them to corresponding sockets
+// Create a new TLB server to accept chunks from anywhere and order them, writing them to corresponding sockets
 func ManyToOne(listener net.Listener, dial_destination Redialer) {
-	tlj_server := tlj.NewServer(listener, tag_socket, type_store())
-	tlj_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlj.TLJContext) {
+	tlb_server := tlb.NewServer(listener, tag_socket, type_store())
+	tlb_server.Accept("all", reflect.TypeOf(Chunk{}), func(iface interface{}, context tlb.TLBContext) {
 		if chunk, ok := iface.(*Chunk); ok {
 			log.WithFields(log.Fields{
 				"at":          "ManyToOne",
@@ -71,10 +71,10 @@ func ManyToOne(listener net.Listener, dial_destination Redialer) {
 	log.WithFields(log.Fields{
 		"at": "ManyToOne",
 	}).Debug("created new ManyToOne")
-	err := <-tlj_server.FailedServer
+	err := <-tlb_server.FailedServer
 	log.WithFields(log.Fields{
 		"error": err.Error(),
-	}).Error("TLJ server failed for ManyToOne")
+	}).Error("TLB server failed for ManyToOne")
 }
 
 // Create a chan if needed to pass events about this socket failing
@@ -121,7 +121,7 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 			"session_id": session_id,
 		}).Debug("creating write back routine for socket")
 		go func() {
-			writer, err := tlj.NewStreamWriter(socket, type_store(), reflect.TypeOf(Chunk{}))
+			writer, err := tlb.NewStreamWriter(socket, type_store(), reflect.TypeOf(Chunk{}))
 			if err != nil {
 				log.WithFields(log.Fields{
 					"at":         "writeResponseChunksIfNeeded",
