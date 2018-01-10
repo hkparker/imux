@@ -80,6 +80,7 @@ func ManyToOne(listener net.Listener, dial_destination Redialer) {
 // Create a chan if needed to pass events about this socket failing
 func createFailReporterIfNeeded(socket_id, session_id string) {
 	fsoMux.Lock()
+	defer fsoMux.Unlock()
 	if _, present := FailedSocketOuts[socket_id]; !present {
 		FailedSocketOuts[socket_id] = make(chan bool, 0)
 		go func(socket_id, session_id string) {
@@ -94,13 +95,13 @@ func createFailReporterIfNeeded(socket_id, session_id string) {
 			}
 		}(socket_id, session_id)
 	}
-	fsoMux.Unlock()
 }
 
 // If it does not exist, create a DataIMUX to read data from
 // outgoing destination sockets with a common session
 func createResponderIMUXIfNeeded(session_id string) {
 	respondersMux.Lock()
+	defer respondersMux.Unlock()
 	if _, present := responders[session_id]; !present {
 		responders[session_id] = NewDataIMUX(session_id)
 		log.WithFields(log.Fields{
@@ -108,13 +109,13 @@ func createResponderIMUXIfNeeded(session_id string) {
 			"session_id": session_id,
 		}).Debug("created new responder imux for session")
 	}
-	respondersMux.Unlock()
 }
 
 // If it is not already happening, ensure that response chunks for a specified
 // session_id are written back down this socket.
 func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 	loopersMux.Lock()
+	defer loopersMux.Unlock()
 	if _, looping := loopers[socket]; !looping {
 		log.WithFields(log.Fields{
 			"at":         "writeResponseChunksIfNeeded",
@@ -163,13 +164,13 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 		}()
 		loopers[socket] = true
 	}
-	loopersMux.Unlock()
 }
 
 // Get the queue a new chunk should go to, dialing the outgoing destination socket if this is the first time
 // a socket ID has been observed.
 func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destination func() (net.Conn, error)) (*WriteQueue, error) {
 	swqMux.Lock()
+	defer swqMux.Unlock()
 	queue, present := server_write_queues[socket_id]
 	if !present {
 		log.WithFields(log.Fields{
@@ -201,6 +202,5 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		}
 		respondersMux.Unlock()
 	}
-	swqMux.Unlock()
 	return queue, nil
 }
