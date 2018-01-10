@@ -80,7 +80,7 @@ func (imux_socket *IMUXSocket) init(session_id string) {
 		}
 		log.WithFields(log.Fields{
 			"at": "IMUXSocket.init",
-		}).Debug("transport socket dies, redailing after cooldown")
+		}).Debug("transport socket died, redailing after cooldown")
 		time.Sleep(cooldown)
 	}
 }

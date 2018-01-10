@@ -70,7 +70,7 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 		cwqMux.Unlock()
 		createFailClientReporter(socket_id, session_id, imuxer)
 
-		go imuxer.ReadFrom(socket_id, socket, session_id)
+		go imuxer.ReadFrom(socket_id, socket)
 	}
 }
 

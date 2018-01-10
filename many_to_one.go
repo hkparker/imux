@@ -191,7 +191,7 @@ func queueForDestinationDialIfNeeded(socket_id, session_id string, dial_destinat
 		server_write_queues[socket_id] = queue
 		respondersMux.Lock()
 		if imuxer, ok := responders[session_id]; ok {
-			go imuxer.ReadFrom(socket_id, destination, session_id)
+			go imuxer.ReadFrom(socket_id, destination)
 		} else {
 			log.WithFields(log.Fields{
 				"at":         "queueForDestinationDialIfNeeded",

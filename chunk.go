@@ -1,9 +1,9 @@
 package imux
 
 import (
-	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/hkparker/TLB"
+	"gopkg.in/mgo.v2/bson"
 )
 
 // A chunk represents a piece of information exchanged between a
@@ -12,17 +12,17 @@ import (
 // while the socket ID specifies which socket a chunk should queue
 // into, ordered by the Sequence ID.
 type Chunk struct {
-	SessionID  string `json:"a"`
-	SocketID   string `json:"b"`
-	SequenceID uint64 `json:"c"`
-	Data       []byte `json:"d"`
-	Close      bool   `json:"e"`
+	SessionID  string
+	SocketID   string
+	SequenceID uint64
+	Data       []byte
+	Close      bool
 }
 
 // TLB code to unpack Chunk data into an interface
 func buildChunk(data []byte, _ tlb.TLBContext) interface{} {
 	chunk := &Chunk{}
-	err := json.Unmarshal(data, &chunk)
+	err := bson.Unmarshal(data, &chunk)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":    "BuildChunk",
