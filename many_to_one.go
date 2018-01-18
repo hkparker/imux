@@ -133,6 +133,7 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 			}
 			respondersMux.Lock()
 			chunk_stream, ok := responders[session_id]
+			respondersMux.Unlock()
 			if !ok {
 				log.WithFields(log.Fields{
 					"at":         "writeResponseChunksIfNeeded",
@@ -140,7 +141,6 @@ func writeResponseChunksIfNeeded(socket net.Conn, session_id string) {
 				}).Error("error looking up responder imux for session_id")
 				return
 			}
-			respondersMux.Unlock()
 			for {
 				new_chunk := <-chunk_stream.Chunks
 				err := writer.Write(new_chunk)

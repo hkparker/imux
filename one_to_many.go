@@ -76,6 +76,7 @@ func OneToMany(listener net.Listener, binds map[string]int, redialer_generator R
 
 func createFailClientReporter(socket_id, session_id string, mux DataIMUX) {
 	fsoMux.Lock()
+	defer fsoMux.Unlock()
 	if _, present := FailedSocketOuts[socket_id]; !present {
 		FailedSocketOuts[socket_id] = make(chan bool, 0)
 		go func(socket_id, session_id string) {
@@ -90,5 +91,4 @@ func createFailClientReporter(socket_id, session_id string, mux DataIMUX) {
 			}
 		}(socket_id, session_id)
 	}
-	fsoMux.Unlock()
 }
