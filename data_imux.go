@@ -36,6 +36,11 @@ func (data_imux *DataIMUX) ReadFrom(id string, conn io.Reader) {
 		"at":        "DataIMUX.ReadFrom",
 		"socket_id": id,
 	}).Debug("reading from new data source")
+	data_imux.Chunks <- Chunk{
+		SocketID:  id,
+		SessionID: data_imux.SessionID,
+		Setup:     true,
+	}
 	sequence := uint64(1)
 	for {
 		chunk_data := make([]byte, MaxChunkDataSize)

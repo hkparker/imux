@@ -33,6 +33,13 @@ func (write_queue *WriteQueue) process() {
 
 // Place a chunk in the correct location in the queue
 func (write_queue *WriteQueue) insert(chunk *Chunk) {
+	if chunk.Setup {
+		log.WithFields(log.Fields{
+			"socket":  chunk.SocketID,
+			"session": chunk.SessionID,
+		}).Debug("setup chunk received")
+		return
+	}
 	if chunk.SequenceID == 0 {
 		log.WithFields(log.Fields{
 			"socket":  chunk.SocketID,

@@ -17,6 +17,7 @@ type Chunk struct {
 	SequenceID uint64
 	Data       []byte
 	Close      bool
+	Setup      bool
 }
 
 // TLB code to unpack Chunk data into an interface
