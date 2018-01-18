@@ -82,10 +82,11 @@ func createRedailerGenerator(dial string, cert *x509.Certificate) imux.RedialerG
 			bind_addr, err := net.ResolveTCPAddr("tcp", bind+":0")
 			if err != nil {
 				log.WithFields(log.Fields{
-					"at":      "createRedialerGenerator",
+					"at":      "redailer",
 					"address": bind,
 					"error":   err.Error(),
 				}).Error("error parsing bind address")
+				return nil, err
 			}
 			conn, err := tls.DialWithDialer(
 				&net.Dialer{
@@ -96,9 +97,16 @@ func createRedailerGenerator(dial string, cert *x509.Certificate) imux.RedialerG
 				&tls.Config{InsecureSkipVerify: true},
 			)
 			if err != nil {
+				log.WithFields(log.Fields{
+					"at":      "redailer",
+					"bind":    bind,
+					"address": dial,
+					"error":   err.Error(),
+				}).Error("error dialing destination")
+				return conn, err
 			}
 			if !reflect.DeepEqual(cert.Signature, conn.ConnectionState().PeerCertificates[0].Signature) {
-				log.Error("holy shit")
+				log.Fatal("SECURITY FATAL ERROR: CERTIFICATE MISMATCH IN IMUX SOCKET!")
 			}
 			return conn, err
 		}
